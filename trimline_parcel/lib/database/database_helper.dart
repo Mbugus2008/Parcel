@@ -118,23 +118,27 @@ class DatabaseHelper {
       ParcelStatus.collected: 'Collected',
     };
 
-    final samples = List<Parcel>.generate(32, (index) {
+    final samples = List<Parcel>.generate(20, (index) {
       final status = ParcelStatus.values[index % ParcelStatus.values.length];
       final cycleIndex = index % origins.length;
       final sentDate = now.subtract(Duration(days: (index * 2) + cycleIndex));
       final routeDuration = 1 + (index % 4);
-      final outForDelivery = status == ParcelStatus.pending
-          ? null
-          : sentDate.add(Duration(hours: 6 + (index % 5) * 2));
-      final deliveredDate = (status == ParcelStatus.received || status == ParcelStatus.collected)
-          ? sentDate.add(Duration(days: routeDuration))
-          : null;
-      final collectedDate = status == ParcelStatus.collected
-          ? sentDate.add(Duration(days: routeDuration + 1))
-          : null;
-      final returnedDate = (status == ParcelStatus.pending && index % 7 == 3)
-          ? sentDate.add(Duration(days: routeDuration + 2))
-          : null;
+      final outForDelivery =
+          status == ParcelStatus.pending
+              ? null
+              : sentDate.add(Duration(hours: 6 + (index % 5) * 2));
+      final deliveredDate =
+          (status == ParcelStatus.received || status == ParcelStatus.collected)
+              ? sentDate.add(Duration(days: routeDuration))
+              : null;
+      final collectedDate =
+          status == ParcelStatus.collected
+              ? sentDate.add(Duration(days: routeDuration + 1))
+              : null;
+      final returnedDate =
+          (status == ParcelStatus.pending && index % 7 == 3)
+              ? sentDate.add(Duration(days: routeDuration + 2))
+              : null;
       final whoPays = WhoToPay.values[index % WhoToPay.values.length];
 
       return Parcel(
@@ -153,7 +157,8 @@ class DatabaseHelper {
         Vehicle: vehicles[index % vehicles.length],
         Who_to_Pay: whoPays,
         Amount_Paid: (1350 + (index * 55) + (cycleIndex * 10)).toDouble(),
-        Paid: status == ParcelStatus.collected ||
+        Paid:
+            status == ParcelStatus.collected ||
             status == ParcelStatus.received && index.isOdd ||
             index % 5 == 0,
         Date_Delivered: deliveredDate,
@@ -161,7 +166,7 @@ class DatabaseHelper {
         Out_For_Delivery_Time: outForDelivery,
         Date_Returned: returnedDate,
         Notes:
-            '${notes[index % notes.length]} (${origins[cycleIndex]} → ${destinations[index % destinations.length]} - ${statusLabels[status]})',
+            '${notes[index % notes.length]} (${origins[cycleIndex]} -> ${destinations[index % destinations.length]} - ${statusLabels[status]})',
       );
     });
 
@@ -175,6 +180,19 @@ class DatabaseHelper {
     }
     await batch.commit(noResult: true);
   }
+
+  Future<void> ensureSampleParcelsSeeded() async {
+    final db = await database;
+    final count =
+        Sqflite.firstIntValue(
+          await db.rawQuery('SELECT COUNT(*) FROM $_tableName'),
+        ) ??
+        0;
+    if (count == 0) {
+      await _seedSampleParcels(db);
+    }
+  }
+
   // --- CRUD Operations ---
 
   /// Inserts a parcel into the database.
@@ -184,10 +202,9 @@ class DatabaseHelper {
     return await db.insert(
       _tableName,
       parcel.toDbMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace, // Replace if Document_No already exists
+      conflictAlgorithm:
+          ConflictAlgorithm.replace, // Replace if Document_No already exists
     );
-
-    
   }
 
   /// Retrieves a single parcel by its Document_No.
@@ -253,4 +270,3 @@ class DatabaseHelper {
   //   });
   // }
 }
-
