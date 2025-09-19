@@ -61,10 +61,56 @@ class DatabaseHelper {
 
   Future<void> _seedSampleParcels(Database db) async {
     final now = DateTime.now();
-    const origins = <String>['Nairobi', 'Mombasa', 'Kisumu', 'Nakuru', 'Eldoret'];
-    const destinations = <String>['Mombasa', 'Nairobi', 'Kampala', 'Dar es Salaam', 'Kigali'];
-    const drivers = <String>['Kamau', 'Achieng', 'Otieno', 'Mwangi', 'Karanja'];
-    const vehicles = <String>['KBA 123X', 'KBB 456Y', 'KBC 789Z', 'KBD 234A', 'KBE 567B'];
+    const origins = <String>[
+      'Nairobi',
+      'Mombasa',
+      'Kisumu',
+      'Nakuru',
+      'Eldoret',
+      'Thika',
+      'Malindi',
+      'Nyeri',
+    ];
+    const destinations = <String>[
+      'Mombasa',
+      'Nairobi',
+      'Kampala',
+      'Dar es Salaam',
+      'Kigali',
+      'Arusha',
+      'Dodoma',
+      'Bujumbura',
+    ];
+    const drivers = <String>[
+      'Kamau',
+      'Achieng',
+      'Otieno',
+      'Mwangi',
+      'Karanja',
+      'Wanjiru',
+      'Mutua',
+      'Chebet',
+    ];
+    const vehicles = <String>[
+      'KBA 123X',
+      'KBB 456Y',
+      'KBC 789Z',
+      'KBD 234A',
+      'KBE 567B',
+      'KBF 890C',
+      'KBG 135D',
+      'KBH 246E',
+    ];
+    const notes = <String>[
+      'Fragile items, handle with care.',
+      'Priority customer delivery.',
+      'Include weekend delivery instructions.',
+      'Requires signature on delivery.',
+      'High value electronics enclosed.',
+      'Temperature-sensitive goods in transit.',
+      'Consolidated shipment with other parcels.',
+      'Notify receiver before delivery.',
+    ];
     const statusLabels = <ParcelStatus, String>{
       ParcelStatus.pending: 'Pending',
       ParcelStatus.inTransit: 'In Transit',
@@ -74,19 +120,26 @@ class DatabaseHelper {
 
     final samples = List<Parcel>.generate(20, (index) {
       final status = ParcelStatus.values[index % ParcelStatus.values.length];
-      final sentDate = now.subtract(Duration(days: index * 2));
-      final outForDelivery = status == ParcelStatus.inTransit ||
-              status == ParcelStatus.received ||
-              status == ParcelStatus.collected
-          ? sentDate.add(const Duration(hours: 8))
-          : null;
-      final deliveredDate = (status == ParcelStatus.received || status == ParcelStatus.collected)
-          ? sentDate.add(const Duration(days: 1))
-          : null;
-      final collectedDate = status == ParcelStatus.collected
-          ? sentDate.add(const Duration(days: 2))
-          : null;
-      final whoPays = index.isEven ? WhoToPay.Sender : WhoToPay.Receiver;
+      final cycleIndex = index % origins.length;
+      final sentDate = now.subtract(Duration(days: (index * 2) + cycleIndex));
+      final routeDuration = 1 + (index % 4);
+      final outForDelivery =
+          status == ParcelStatus.pending
+              ? null
+              : sentDate.add(Duration(hours: 6 + (index % 5) * 2));
+      final deliveredDate =
+          (status == ParcelStatus.received || status == ParcelStatus.collected)
+              ? sentDate.add(Duration(days: routeDuration))
+              : null;
+      final collectedDate =
+          status == ParcelStatus.collected
+              ? sentDate.add(Duration(days: routeDuration + 1))
+              : null;
+      final returnedDate =
+          (status == ParcelStatus.pending && index % 7 == 3)
+              ? sentDate.add(Duration(days: routeDuration + 2))
+              : null;
+      final whoPays = WhoToPay.values[index % WhoToPay.values.length];
 
       return Parcel(
         Document_No: 'SAMPLE-${(index + 1).toString().padLeft(3, '0')}',
@@ -94,7 +147,7 @@ class DatabaseHelper {
         Sender_Name: 'Sender ${index + 1}',
         Sender_ID: 'SID${(index + 1).toString().padLeft(4, '0')}',
         Sender_Phone: '070${(index + 1234567).toString().padLeft(7, '0')}',
-        From: origins[index % origins.length],
+        From: origins[cycleIndex],
         To: destinations[index % destinations.length],
         Receiver_Name: 'Receiver ${index + 1}',
         Receiver_ID: 'RID${(index + 1).toString().padLeft(4, '0')}',
@@ -103,12 +156,17 @@ class DatabaseHelper {
         Driver: drivers[index % drivers.length],
         Vehicle: vehicles[index % vehicles.length],
         Who_to_Pay: whoPays,
-        Amount_Paid: (1500 + index * 75).toDouble(),
-        Paid: status == ParcelStatus.collected || index % 4 == 0,
+        Amount_Paid: (1350 + (index * 55) + (cycleIndex * 10)).toDouble(),
+        Paid:
+            status == ParcelStatus.collected ||
+            status == ParcelStatus.received && index.isOdd ||
+            index % 5 == 0,
         Date_Delivered: deliveredDate,
         Date_Collected: collectedDate,
         Out_For_Delivery_Time: outForDelivery,
-        Notes: 'Demo parcel ${(index + 1)} (${statusLabels[status]}).',
+        Date_Returned: returnedDate,
+        Notes:
+            '${notes[index % notes.length]} (${origins[cycleIndex]} -> ${destinations[index % destinations.length]} - ${statusLabels[status]})',
       );
     });
 
@@ -122,6 +180,19 @@ class DatabaseHelper {
     }
     await batch.commit(noResult: true);
   }
+
+  Future<void> ensureSampleParcelsSeeded() async {
+    final db = await database;
+    final count =
+        Sqflite.firstIntValue(
+          await db.rawQuery('SELECT COUNT(*) FROM $_tableName'),
+        ) ??
+        0;
+    if (count == 0) {
+      await _seedSampleParcels(db);
+    }
+  }
+
   // --- CRUD Operations ---
 
   /// Inserts a parcel into the database.
@@ -131,10 +202,9 @@ class DatabaseHelper {
     return await db.insert(
       _tableName,
       parcel.toDbMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace, // Replace if Document_No already exists
+      conflictAlgorithm:
+          ConflictAlgorithm.replace, // Replace if Document_No already exists
     );
-
-    
   }
 
   /// Retrieves a single parcel by its Document_No.
@@ -200,4 +270,3 @@ class DatabaseHelper {
   //   });
   // }
 }
-

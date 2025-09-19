@@ -32,7 +32,8 @@ class ParcelController extends GetxController {
 
   Parcel? parcel;
 
-  List<Parcel> get parcels => _parcels;
+  List<Parcel> get parcels => _filteredParcels;
+  List<Parcel> get allParcels => _parcels;
   List<Parcel> get filteredParcels => _filteredParcels;
   bool get isLoading => _isLoading.value;
   String get searchQuery => _searchQuery.value;
@@ -43,7 +44,7 @@ class ParcelController extends GetxController {
     final Map<ParcelStatus, List<Parcel>> grouped = {
       for (final status in _statusOrder) status: <Parcel>[],
     };
-    for (final parcel in _parcels) {
+    for (final parcel in parcels) {
       final status = parcel.Status ?? ParcelStatus.pending;
       grouped.putIfAbsent(status, () => <Parcel>[]).add(parcel);
     }
@@ -98,7 +99,11 @@ class ParcelController extends GetxController {
   Future<void> loadParcels() async {
     _isLoading.value = true;
     try {
-      final items = await _dbHelper.getAllParcels();
+      var items = await _dbHelper.getAllParcels();
+      if (items.isEmpty) {
+        await _dbHelper.ensureSampleParcelsSeeded();
+        items = await _dbHelper.getAllParcels();
+      }
       _parcels.assignAll(items);
       _filterParcels();
     } catch (e) {
@@ -107,7 +112,11 @@ class ParcelController extends GetxController {
       }
       _parcels.clear();
       _filteredParcels.clear();
-      Get.snackbar('Error', 'Failed to load parcels', snackPosition: SnackPosition.BOTTOM);
+      Get.snackbar(
+        'Error',
+        'Failed to load parcels',
+        snackPosition: SnackPosition.BOTTOM,
+      );
     } finally {
       _isLoading.value = false;
     }
@@ -122,6 +131,7 @@ class ParcelController extends GetxController {
     _statusFilter.value = status;
     _filterParcels();
   }
+
   void _filterParcels() {
     final query = _searchQuery.value.trim().toLowerCase();
     final status = _statusFilter.value;
@@ -136,7 +146,8 @@ class ParcelController extends GetxController {
 
     if (query.isNotEmpty) {
       filtered = filtered.where((parcel) {
-        bool matches(String? value) => value?.toLowerCase().contains(query) ?? false;
+        bool matches(String? value) =>
+            value?.toLowerCase().contains(query) ?? false;
 
         return matches(parcel.Document_No) ||
             matches(parcel.Sender_Name) ||
@@ -153,9 +164,8 @@ class ParcelController extends GetxController {
   }
 
   void addParcelDetail() {
-    final docNo = documentNoController.text.isEmpty
-        ? 'TEMP-'
-        : documentNoController.text;
+    final docNo =
+        documentNoController.text.isEmpty ? 'TEMP-' : documentNoController.text;
     parcel ??= _buildEmptyParcel(docNo);
     parcel!.parcelDetails.add(
       Parcel_Details(
@@ -184,13 +194,21 @@ class ParcelController extends GetxController {
 
     final updated = parcel.copyWith(
       Status: newStatus,
-      Date_Delivered: newStatus == ParcelStatus.received ? DateTime.now() : parcel.Date_Delivered,
-      Date_Collected: newStatus == ParcelStatus.collected ? DateTime.now() : parcel.Date_Collected,
+      Date_Delivered:
+          newStatus == ParcelStatus.received
+              ? DateTime.now()
+              : parcel.Date_Delivered,
+      Date_Collected:
+          newStatus == ParcelStatus.collected
+              ? DateTime.now()
+              : parcel.Date_Collected,
     );
 
     try {
       await _dbHelper.updateParcel(updated);
-      final index = _parcels.indexWhere((p) => p.Document_No == updated.Document_No);
+      final index = _parcels.indexWhere(
+        (p) => p.Document_No == updated.Document_No,
+      );
       if (index != -1) {
         _parcels[index] = updated;
         _parcels.refresh();
@@ -319,7 +337,9 @@ class ParcelController extends GetxController {
       } else {
         deviceId = 'UNKNOWNDEVICE';
       }
-      final sanitized = deviceId.replaceAll(RegExp('[^A-Za-z0-9]'), '').padRight(6, 'X');
+      final sanitized = deviceId
+          .replaceAll(RegExp('[^A-Za-z0-9]'), '')
+          .padRight(6, 'X');
       final normalized = sanitized.substring(0, 6).toUpperCase();
       final timestamp = DateTime.now().millisecondsSinceEpoch.toString();
       final suffix = timestamp.substring(timestamp.length - 6);
