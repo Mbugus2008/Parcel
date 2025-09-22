@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:trimline_parcel/pages/addeditparcel.dart';
-import 'package:trimline_parcel/pages/parcel_dashboard_page.dart';
-import 'package:trimline_parcel/pages/parcel_date_filter_page.dart';
-import 'package:trimline_parcel/pages/send.dart';
-import 'package:trimline_parcel/widgets/parcel_card.dart';
+import '../pages/addeditparcel.dart';
+import '../pages/parcel_dashboard_page.dart';
+import '../pages/parcel_date_filter_page.dart';
+import '../pages/send.dart';
+import '../widgets/parcel_card.dart';
 import '../controllers/parcel_controller.dart';
 import '../models/parcel_model.dart';
 
@@ -103,7 +103,7 @@ class _ParcelListPageState extends State<ParcelListPage> {
             () => IconButton(
               icon: const Icon(Icons.refresh),
               onPressed:
-                  _parcelController.isLoading
+                  _parcelController.isLoadingRx.value
                       ? null
                       : _parcelController.loadParcels,
             ),
@@ -160,13 +160,13 @@ class _ParcelListPageState extends State<ParcelListPage> {
           ),
 
           Obx(() {
-            if (_parcelController.isLoading) {
+            if (_parcelController.isLoadingRx.value) {
               return const Expanded(
                 child: Center(child: CircularProgressIndicator()),
               );
             }
 
-            if (_parcelController.filteredParcels.isEmpty) {
+            if (_parcelController.filteredParcelsRx.isEmpty) {
               return const Expanded(
                 child: Center(child: Text('No parcels found')),
               );
@@ -174,9 +174,9 @@ class _ParcelListPageState extends State<ParcelListPage> {
 
             return Expanded(
               child: ListView.builder(
-                itemCount: _parcelController.filteredParcels.length,
+                itemCount: _parcelController.filteredParcelsRx.length,
                 itemBuilder: (context, index) {
-                  final parcel = _parcelController.filteredParcels[index];
+                  final parcel = _parcelController.filteredParcelsRx[index];
                   return Card(
                     margin: const EdgeInsets.symmetric(
                       horizontal: 8,

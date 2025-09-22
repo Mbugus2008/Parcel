@@ -1,4 +1,4 @@
-import 'package:trimline_parcel/models/Parcel_Details.dart';
+import './Parcel_Details.dart';
 
 enum WhoToPay {
   Sender,

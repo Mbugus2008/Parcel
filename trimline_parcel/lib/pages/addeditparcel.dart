@@ -20,6 +20,7 @@ class AddEditParcelPage extends StatefulWidget {
 
 class _AddEditParcelPageState extends State<AddEditParcelPage> {
   late final ParcelController controller = Get.find<ParcelController>();
+  int _currentStep = 0;
 
   @override
   void initState() {
@@ -49,96 +50,78 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
     final theme = Theme.of(context);
     final isEditing = widget.parcel != null;
 
-    return DefaultTabController(
-      length: 5,
-      child: Scaffold(
+    final steps = _buildSteps(context);
+
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      appBar: AppBar(
         backgroundColor: Colors.transparent,
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          titleSpacing: 0,
-          title: Text(
-            isEditing ? 'Update Parcel' : 'Create Parcel',
-            style: theme.textTheme.titleLarge?.copyWith(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          bottom: PreferredSize(
-            preferredSize: const Size.fromHeight(156),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                  child: _buildSummaryBar(theme),
-                ),
-                const TabBar(
-                  isScrollable: true,
-                  tabs: [
-                    Tab(text: 'Parcel'),
-                    Tab(text: 'Sender'),
-                    Tab(text: 'Receiver'),
-                    Tab(text: 'Logistics'),
-                    Tab(text: 'Items'),
-                  ],
-                ),
-              ],
+        elevation: 0,
+        titleSpacing: 0,
+        toolbarHeight: 140,
+        flexibleSpace: SafeArea(
+          bottom: false,
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(72, 0, 16, 12),
+              child: _buildSummaryBar(theme),
             ),
           ),
         ),
-        body: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Color(0xFF101728), Color(0xFF1C2B4A)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-          ),
-          child: SafeArea(
-            child: Form(
-              key: controller.formKey,
-              child: TabBarView(
-                physics: const ClampingScrollPhysics(),
-                children: [
-                  _buildTabContent(context, [
-                    _buildParcelSection(context),
-                  ]),
-                  _buildTabContent(context, [
-                    _buildSenderSection(context),
-                  ]),
-                  _buildTabContent(context, [
-                    _buildReceiverSection(context),
-                  ]),
-                  _buildTabContent(context, [
-                    _buildDeliverySection(context),
-                  ]),
-                  _buildTabContent(context, [
-                    _buildDetailsSection(context),
-                  ]),
-                ],
-              ),
-            ),
+      ),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFF101728), Color(0xFF1C2B4A)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
           ),
         ),
-        bottomNavigationBar: SafeArea(
-          minimum: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-          child: SizedBox(
-            height: 56,
-            child: ElevatedButton.icon(
-              onPressed: () {
-                if (controller.formKey.currentState!.validate()) {
-                  _submitForm();
+        child: SafeArea(
+          child: Form(
+            key: controller.formKey,
+            child: Stepper(
+              type: StepperType.vertical,
+              physics: const ClampingScrollPhysics(),
+              currentStep: _currentStep,
+              steps: steps,
+              onStepContinue: () {
+                final isLastStep = _currentStep == steps.length - 1;
+                if (isLastStep) {
+                  if (controller.formKey.currentState!.validate()) {
+                    _submitForm();
+                  }
+                } else {
+                  setState(() => _currentStep += 1);
                 }
               },
-              icon: Icon(isEditing ? Icons.save_rounded : Icons.check_circle_outline),
-              label: Text(isEditing ? 'Update Parcel' : 'Save Parcel'),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-              ),
+              onStepCancel: () {
+                if (_currentStep > 0) {
+                  setState(() => _currentStep -= 1);
+                }
+              },
+              onStepTapped: (index) => setState(() => _currentStep = index),
+              controlsBuilder: (context, details) {
+                final isLastStep = _currentStep == steps.length - 1;
+                return Row(
+                  children: [
+                    ElevatedButton(
+                      onPressed: details.onStepContinue,
+                      child: Text(
+                        isLastStep
+                            ? (isEditing ? 'Update Parcel' : 'Save Parcel')
+                            : 'Next',
+                      ),
+                    ),
+                    if (_currentStep > 0)
+                      TextButton(
+                        onPressed: details.onStepCancel,
+                        child: const Text('Back'),
+                      ),
+                  ],
+                );
+              },
             ),
           ),
         ),
@@ -146,86 +129,128 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
     );
   }
 
+  List<Step> _buildSteps(BuildContext context) {
+    final contents = [
+      _buildTabContent(context, [_buildParcelSection(context)]),
+      _buildTabContent(context, [_buildSenderSection(context)]),
+      _buildTabContent(context, [_buildReceiverSection(context)]),
+      _buildTabContent(context, [_buildDeliverySection(context)]),
+      _buildTabContent(context, [_buildDetailsSection(context)]),
+    ];
+
+    const titles = ['Parcel', 'Sender', 'Receiver', 'Logistics', 'Items'];
+
+    return List.generate(titles.length, (index) {
+      return Step(
+        title: Text(titles[index]),
+        state: _stepStateFor(index),
+        isActive: _currentStep >= index,
+        content: contents[index],
+      );
+    });
+  }
+
+  StepState _stepStateFor(int index) {
+    if (_currentStep > index) {
+      return StepState.complete;
+    }
+    if (_currentStep == index) {
+      return StepState.editing;
+    }
+    return StepState.indexed;
+  }
+
   Widget _buildSummaryBar(ThemeData theme) {
     return ValueListenableBuilder<TextEditingValue>(
       valueListenable: controller.documentNoController,
-      builder: (context, docValue, _) => ValueListenableBuilder<TextEditingValue>(
-        valueListenable: controller.amountPaidController,
-        builder: (context, amountValue, __) {
-          final status = controller.selectedStatus;
-          final statusColor = getStatusColor(status);
-          return Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
-              gradient: const LinearGradient(
-                colors: [Color(0xFF1F2D4D), Color(0xFF2E3E63)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.18),
-                  blurRadius: 12,
-                  offset: const Offset(0, 8),
+      builder:
+          (context, docValue, _) => ValueListenableBuilder<TextEditingValue>(
+            valueListenable: controller.amountPaidController,
+            builder: (context, amountValue, __) {
+              final status = controller.selectedStatus;
+              final statusColor = getStatusColor(status);
+              return Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
                 ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        docValue.text,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        DateFormat('dd MMM yyyy').format(controller.selectedDate),
-                        style: theme.textTheme.bodySmall?.copyWith(color: Colors.white70),
-                      ),
-                    ],
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF1F2D4D), Color(0xFF2E3E63)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        controller.statusLabel(status),
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'KES ',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                      ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.18),
+                      blurRadius: 12,
+                      offset: const Offset(0, 8),
                     ),
                   ],
                 ),
-              ],
-            ),
-          );
-        },
-      ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            docValue.text,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            DateFormat(
+                              'dd MMM yyyy',
+                            ).format(controller.selectedDate),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: Colors.white70,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: statusColor.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            controller.statusLabel(status),
+                            style: theme.textTheme.labelMedium?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'KES ',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
     );
   }
 
@@ -314,10 +339,7 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
               if (trailing != null) trailing,
             ],
           ),
-          if (children.isNotEmpty) ...[
-            const SizedBox(height: 24),
-            ...children,
-          ],
+          if (children.isNotEmpty) ...[const SizedBox(height: 24), ...children],
         ],
       ),
     );
@@ -344,60 +366,58 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
         Text(
           'Parcel status',
           style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
-              ),
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+          ),
         ),
         const SizedBox(height: 12),
         Wrap(
           spacing: 12,
-          children: controller.supportedStatuses.map((option) {
-            final isSelected = controller.selectedStatus == option;
-            return ChoiceChip(
-              label: Text(controller.statusLabel(option)),
-              selected: isSelected,
-              onSelected: (selected) {
-                if (selected) {
-                  setState(() {
-                    controller.selectedStatus = option;
-                  });
-                }
-              },
-              labelStyle: TextStyle(
-                color: isSelected ? Colors.white : Colors.white70,
-                fontWeight: FontWeight.w600,
-              ),
-              backgroundColor: Colors.white.withValues(alpha: 0.08),
-              selectedColor: getStatusColor(option).withValues(alpha: 0.4),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-                side: BorderSide(
-                  color: isSelected ? Colors.white : Colors.white24,
-                ),
-              ),
-            );
-          }).toList(),
+          children:
+              controller.supportedStatuses.map((option) {
+                final isSelected = controller.selectedStatus == option;
+                return ChoiceChip(
+                  label: Text(controller.statusLabel(option)),
+                  selected: isSelected,
+                  onSelected: (selected) {
+                    if (selected) {
+                      setState(() {
+                        controller.selectedStatus = option;
+                      });
+                    }
+                  },
+                  labelStyle: TextStyle(
+                    color: isSelected ? Colors.white : Colors.white70,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  backgroundColor: Colors.white.withValues(alpha: 0.08),
+                  selectedColor: getStatusColor(option).withValues(alpha: 0.4),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    side: BorderSide(
+                      color: isSelected ? Colors.white : Colors.white24,
+                    ),
+                  ),
+                );
+              }).toList(),
         ),
         const SizedBox(height: 16),
-        _buildInlineFields(
-          context,
-          [
-            _buildTextField(
-              controller: controller.fromController,
-              label: 'From (Location)',
-              prefixIcon: Icons.location_on,
-              isRequired: true,
-              error: controller.parcelinformationError,
-            ),
-            _buildTextField(
-              controller: controller.toController,
-              label: 'To (Destination)',
-              prefixIcon: Icons.location_on,
-              isRequired: true,
-              error: controller.parcelinformationError,
-            ),
-          ],
-        ),
+        _buildInlineFields(context, [
+          _buildTextField(
+            controller: controller.fromController,
+            label: 'From (Location)',
+            prefixIcon: Icons.location_on,
+            isRequired: true,
+            error: controller.parcelinformationError,
+          ),
+          _buildTextField(
+            controller: controller.toController,
+            label: 'To (Destination)',
+            prefixIcon: Icons.location_on,
+            isRequired: true,
+            error: controller.parcelinformationError,
+          ),
+        ]),
       ],
     );
   }
@@ -417,22 +437,19 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
           error: controller.senderinformationError,
         ),
         const SizedBox(height: 16),
-        _buildInlineFields(
-          context,
-          [
-            _buildTextField(
-              controller: controller.senderPhoneController,
-              label: 'Sender Phone',
-              prefixIcon: Icons.phone,
-              isRequired: true,
-            ),
-            _buildTextField(
-              controller: controller.senderIdController,
-              label: 'Sender ID / Passport',
-              prefixIcon: Icons.credit_card,
-            ),
-          ],
-        ),
+        _buildInlineFields(context, [
+          _buildTextField(
+            controller: controller.senderPhoneController,
+            label: 'Sender Phone',
+            prefixIcon: Icons.phone,
+            isRequired: true,
+          ),
+          _buildTextField(
+            controller: controller.senderIdController,
+            label: 'Sender ID / Passport',
+            prefixIcon: Icons.credit_card,
+          ),
+        ]),
       ],
     );
   }
@@ -452,23 +469,20 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
           error: controller.receiverinformationError,
         ),
         const SizedBox(height: 16),
-        _buildInlineFields(
-          context,
-          [
-            _buildTextField(
-              controller: controller.receiverPhoneController,
-              label: 'Receiver Phone',
-              prefixIcon: Icons.phone_outlined,
-              isRequired: true,
-              keyboardType: TextInputType.phone,
-            ),
-            _buildTextField(
-              controller: controller.receiverIdController,
-              label: 'Receiver ID / Passport',
-              prefixIcon: Icons.perm_identity,
-            ),
-          ],
-        ),
+        _buildInlineFields(context, [
+          _buildTextField(
+            controller: controller.receiverPhoneController,
+            label: 'Receiver Phone',
+            prefixIcon: Icons.phone_outlined,
+            isRequired: true,
+            keyboardType: TextInputType.phone,
+          ),
+          _buildTextField(
+            controller: controller.receiverIdController,
+            label: 'Receiver ID / Passport',
+            prefixIcon: Icons.perm_identity,
+          ),
+        ]),
       ],
     );
   }
@@ -501,7 +515,10 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
 
   Widget _buildDetailsSection(BuildContext context) {
     final details = controller.parcel?.parcelDetails ?? <Parcel_Details>[];
-    final total = details.fold<double>(0, (sum, item) => sum + (item.Amount ?? 0.0));
+    final total = details.fold<double>(
+      0,
+      (sum, item) => sum + (item.Amount ?? 0.0),
+    );
 
     return _buildSectionCard(
       context,
@@ -543,7 +560,9 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
             children: [
               for (var i = 0; i < details.length; i++)
                 Padding(
-                  padding: EdgeInsets.only(bottom: i == details.length - 1 ? 0 : 12),
+                  padding: EdgeInsets.only(
+                    bottom: i == details.length - 1 ? 0 : 12,
+                  ),
                   child: _buildParcelDetailTile(context, details[i], i),
                 ),
             ],
@@ -560,7 +579,9 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
             children: [
               for (var i = 0; i < fields.length; i++)
                 Padding(
-                  padding: EdgeInsets.only(bottom: i == fields.length - 1 ? 0 : 16),
+                  padding: EdgeInsets.only(
+                    bottom: i == fields.length - 1 ? 0 : 16,
+                  ),
                   child: fields[i],
                 ),
             ],
@@ -571,7 +592,9 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
             for (var i = 0; i < fields.length; i++)
               Expanded(
                 child: Padding(
-                  padding: EdgeInsets.only(right: i == fields.length - 1 ? 0 : 16),
+                  padding: EdgeInsets.only(
+                    right: i == fields.length - 1 ? 0 : 16,
+                  ),
                   child: fields[i],
                 ),
               ),
@@ -604,15 +627,17 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
                 Text(
                   'Payment status',
                   style: theme.textTheme.labelLarge?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 Text(
                   controller.paid
                       ? 'Customer has settled payment'
                       : 'Awaiting payment confirmation',
-                  style: theme.textTheme.bodySmall?.copyWith(color: Colors.white70),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: Colors.white70,
+                  ),
                 ),
               ],
             ),
@@ -660,7 +685,11 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
     );
   }
 
-  Widget _buildParcelDetailTile(BuildContext context, Parcel_Details detail, int index) {
+  Widget _buildParcelDetailTile(
+    BuildContext context,
+    Parcel_Details detail,
+    int index,
+  ) {
     return InkWell(
       borderRadius: BorderRadius.circular(18),
       onTap: () => _showEditParcelDetailDialog(context, detail, index),
@@ -691,7 +720,10 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
                     const SizedBox(height: 6),
                     Text(
                       detail.Remarks!,
-                      style: const TextStyle(color: Colors.white60, fontSize: 12),
+                      style: const TextStyle(
+                        color: Colors.white60,
+                        fontSize: 12,
+                      ),
                     ),
                   ],
                 ],
@@ -708,7 +740,10 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                  icon: const Icon(
+                    Icons.delete_outline,
+                    color: Colors.redAccent,
+                  ),
                   onPressed: () {
                     // controller.removeParcelDetail(index);
                   },
@@ -748,24 +783,36 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
           controller: controller,
           keyboardType: keyboardType,
           readOnly: readOnly,
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w500,
+          ),
           cursorColor: Colors.white,
           decoration: (decoration ?? const InputDecoration()).copyWith(
             filled: true,
             fillColor: Colors.white.withValues(alpha: 0.07),
             labelText: label,
             labelStyle: TextStyle(
-              color: showError
-                  ? Colors.redAccent
-                  : (isEmpty && isRequired ? Colors.orangeAccent : Colors.white70),
+              color:
+                  showError
+                      ? Colors.redAccent
+                      : (isEmpty && isRequired
+                          ? Colors.orangeAccent
+                          : Colors.white70),
               fontWeight: FontWeight.w600,
             ),
-            prefixIcon: prefixIcon != null
-                ? Icon(prefixIcon, color: Colors.white70)
-                : decoration?.prefixIcon,
-            suffixIcon: isRequired
-                ? const Icon(Icons.star_rounded, size: 16, color: Colors.redAccent)
-                : decoration?.suffixIcon,
+            prefixIcon:
+                prefixIcon != null
+                    ? Icon(prefixIcon, color: Colors.white70)
+                    : decoration?.prefixIcon,
+            suffixIcon:
+                isRequired
+                    ? const Icon(
+                      Icons.star_rounded,
+                      size: 16,
+                      color: Colors.redAccent,
+                    )
+                    : decoration?.suffixIcon,
             enabledBorder: baseBorder,
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(18),
@@ -779,87 +826,100 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
             ),
             errorText: showError ? error?.value : null,
           ),
-          validator: isRequired
-              ? (value) {
-                  error?.value = '';
-                  if (value == null || value.isEmpty) {
-                    error?.value = ' field is required';
-                    return error?.value;
+          validator:
+              isRequired
+                  ? (value) {
+                    error?.value = '';
+                    if (value == null || value.isEmpty) {
+                      error?.value = ' field is required';
+                      return error?.value;
+                    }
+                    return null;
                   }
-                  return null;
-                }
-              : null,
+                  : null,
         );
       },
     );
   }
 
   Future<void> _showEditParcelDetailDialog(
-      BuildContext context, Parcel_Details parcelDetail, int index) async {
+    BuildContext context,
+    Parcel_Details parcelDetail,
+    int index,
+  ) async {
     final descCtrl = TextEditingController(text: parcelDetail.Description);
-    final amountCtrl = TextEditingController(text: parcelDetail.Amount?.toString());
+    final amountCtrl = TextEditingController(
+      text: parcelDetail.Amount?.toString(),
+    );
     final remarksCtrl = TextEditingController(text: parcelDetail.Remarks);
 
     await showDialog(
       context: context,
-      builder: (ctx) => Dialog(
-        insetPadding: EdgeInsets.zero,
-        child: SizedBox(
-          width: MediaQuery.of(context).size.width,
-          height: MediaQuery.of(context).size.height,
-          child: Scaffold(
-            appBar: AppBar(title: const Text('Edit Parcel Detail')),
-            body: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: SingleChildScrollView(
-                child: Column(
-                  children: [
-                    TextField(
-                      controller: descCtrl,
-                      maxLines: null,
-                      minLines: 3,
-                      decoration: const InputDecoration(labelText: 'Description'),
+      builder:
+          (ctx) => Dialog(
+            insetPadding: EdgeInsets.zero,
+            child: SizedBox(
+              width: MediaQuery.of(context).size.width,
+              height: MediaQuery.of(context).size.height,
+              child: Scaffold(
+                appBar: AppBar(title: const Text('Edit Parcel Detail')),
+                body: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      children: [
+                        TextField(
+                          controller: descCtrl,
+                          maxLines: null,
+                          minLines: 3,
+                          decoration: const InputDecoration(
+                            labelText: 'Description',
+                          ),
+                        ),
+                        TextField(
+                          controller: amountCtrl,
+                          decoration: const InputDecoration(
+                            labelText: 'Amount',
+                          ),
+                          keyboardType: TextInputType.number,
+                        ),
+                        TextField(
+                          controller: remarksCtrl,
+                          decoration: const InputDecoration(
+                            labelText: 'Remarks',
+                          ),
+                        ),
+                      ],
                     ),
-                    TextField(
-                      controller: amountCtrl,
-                      decoration: const InputDecoration(labelText: 'Amount'),
-                      keyboardType: TextInputType.number,
-                    ),
-                    TextField(
-                      controller: remarksCtrl,
-                      decoration: const InputDecoration(labelText: 'Remarks'),
-                    ),
-                  ],
+                  ),
+                ),
+                bottomNavigationBar: Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        child: const Text('Cancel'),
+                      ),
+                      ElevatedButton(
+                        onPressed: () {
+                          // controller.updateParcelDetail(
+                          //   index,
+                          //   descCtrl.text,
+                          //   double.tryParse(amountCtrl.text) ?? 0.0,
+                          //   remarksCtrl.text,
+                          // );
+                          Navigator.pop(ctx);
+                        },
+                        child: const Text('Save'),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-            bottomNavigationBar: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    child: const Text('Cancel'),
-                  ),
-                  ElevatedButton(
-                    onPressed: () {
-                      // controller.updateParcelDetail(
-                      //   index,
-                      //   descCtrl.text,
-                      //   double.tryParse(amountCtrl.text) ?? 0.0,
-                      //   remarksCtrl.text,
-                      // );
-                      Navigator.pop(ctx);
-                    },
-                    child: const Text('Save'),
-                  ),
-                ],
-              ),
-            ),
           ),
-        ),
-      ),
     );
   }
 
@@ -880,7 +940,8 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
         Driver: controller.driverController.text,
         Vehicle: controller.vehicleController.text,
         Who_to_Pay: controller.paymentResponsibility,
-        Amount_Paid: double.tryParse(controller.amountPaidController.text) ?? 0.0,
+        Amount_Paid:
+            double.tryParse(controller.amountPaidController.text) ?? 0.0,
         Paid: controller.paid,
         Date_Collected: controller.parcel?.Date_Collected,
         Date_Delivered: controller.parcel?.Date_Delivered,
@@ -907,9 +968,3 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
     }
   }
 }
-
-
-
-
-
-

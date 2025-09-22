@@ -4,8 +4,8 @@ import 'package:intl/intl.dart';
 
 import '../controllers/parcel_controller.dart';
 import '../models/parcel_model.dart';
-import '../utilities/status_color.dart';
 import '../pages/addeditparcel.dart';
+import '../utilities/status_color.dart';
 
 class ParcelCard extends StatelessWidget {
   const ParcelCard({super.key, required this.parcel});
@@ -55,9 +55,9 @@ class ParcelCard extends StatelessWidget {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          DateFormat('dd MMM yyyy').format(
-                            parcel.Date_sent ?? DateTime.now(),
-                          ),
+                          DateFormat(
+                            'dd MMM yyyy',
+                          ).format(parcel.Date_sent ?? DateTime.now()),
                           style: theme.textTheme.bodySmall,
                         ),
                       ],
@@ -65,7 +65,9 @@ class ParcelCard extends StatelessWidget {
                   ),
                   PopupMenuButton<ParcelStatus>(
                     icon: const Icon(Icons.more_vert),
-                    onSelected: (newStatus) => controller.updateParcelStatus(parcel, newStatus),
+                    onSelected:
+                        (newStatus) =>
+                            controller.updateParcelStatus(parcel, newStatus),
                     itemBuilder: (context) {
                       return controller.supportedStatuses
                           .map(
@@ -84,7 +86,10 @@ class ParcelCard extends StatelessWidget {
               Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: statusColor.withValues(alpha: 0.18),
                       borderRadius: BorderRadius.circular(12),
@@ -100,7 +105,9 @@ class ParcelCard extends StatelessWidget {
                   const Spacer(),
                   Text(
                     'KES ',
-                    style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ],
               ),
@@ -152,10 +159,7 @@ class ParcelCard extends StatelessWidget {
                     const Icon(Icons.local_shipping_outlined, size: 16),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Text(
-                        ' • ',
-                        style: theme.textTheme.bodySmall,
-                      ),
+                      child: Text(' • ', style: theme.textTheme.bodySmall),
                     ),
                   ],
                 ),
@@ -228,17 +232,23 @@ class ParcelCard extends StatelessWidget {
           children: [
             Text(
               title,
-              style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w700),
+              style: theme.textTheme.labelSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
             ),
             const SizedBox(height: 4),
             Text(
               name?.isNotEmpty == true ? name! : '-',
-              style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
             ),
             const SizedBox(height: 2),
             Text(
               phone?.isNotEmpty == true ? phone! : '-',
-              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.primary,
+              ),
             ),
           ],
         ),
@@ -246,5 +256,3 @@ class ParcelCard extends StatelessWidget {
     );
   }
 }
-
-

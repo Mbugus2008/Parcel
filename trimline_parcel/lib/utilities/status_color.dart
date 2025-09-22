@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:trimline_parcel/models/parcel_model.dart';
+import '../models/parcel_model.dart';
 
 Color getStatusColor(ParcelStatus status) {
   switch (status) {

@@ -9,7 +9,7 @@ import 'package:http/http.dart' as http;
 
 import 'dart:convert';
 
-import 'package:trimline_parcel/utilities/logger.dart';
+import './logger.dart';
 
 class ApiClient extends ChangeNotifier {
   final LoggerService logger = Get.find();

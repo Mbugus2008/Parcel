@@ -1,0 +1,48 @@
+  Widget _buildStepParcelRow({
+    required BuildContext context,
+    required Parcel parcel,
+    required Color statusColor,
+  }) {
+    final theme = Theme.of(context);
+    final route = _formatRoute(parcel);
+    final sentDate =
+        parcel.Date_sent != null
+            ? DateFormat('dd MMM').format(parcel.Date_sent!)
+            : 'No date';
+
+    final senderParts = <String>[];
+    final senderName = parcel.Sender_Name?.trim();
+    if (senderName != null && senderName.isNotEmpty) {
+      senderParts.add(senderName);
+    }
+    final senderPhone = parcel.Sender_Phone?.trim();
+    if (senderPhone != null && senderPhone.isNotEmpty) {
+      senderParts.add(senderPhone);
+    }
+    final senderDisplay = senderParts.isEmpty ? null : senderParts.join(' | ');
+
+    final receiverParts = <String>[];
+    final receiverName = parcel.Receiver_Name?.trim();
+    if (receiverName != null && receiverName.isNotEmpty) {
+      receiverParts.add(receiverName);
+    }
+    final receiverPhone = parcel.Receiver_Phone?.trim();
+    if (receiverPhone != null && receiverPhone.isNotEmpty) {
+      receiverParts.add(receiverPhone);
+    }
+    final receiverDisplay =
+        receiverParts.isEmpty ? null : receiverParts.join(' | ');
+
+    final contactChips = <Widget>[];
+    if (senderDisplay != null) {
+      contactChips.add(
+        _buildContactChip(
+          theme: theme,
+          label: 'Sender',
+          detail: senderDisplay,
+          icon: Icons.send_rounded,
+          chipColor: statusColor,
+        ),
+      );
+    }
+    if (receiverDisplay != nu

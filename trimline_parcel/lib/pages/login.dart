@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:get/get_core/src/get_main.dart';
-import 'package:trimline_parcel/pages/parcel_dashboard_page.dart';
-import 'package:trimline_parcel/pages/parcellist.dart';
+import '../pages/parcel_dashboard_page.dart';
+import '../pages/parcellist.dart';
 
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
