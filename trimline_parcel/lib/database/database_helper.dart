@@ -1,8 +1,12 @@
 import 'dart:async';
+
 import 'package:path/path.dart';
-import 'package:sqflite/sqflite.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:sqflite/sqflite.dart';
+
+import '../inspection/models/bus_inspection.dart';
 import '../models/parcel_model.dart';
+import '../models/pricing_rate.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
@@ -11,6 +15,9 @@ class DatabaseHelper {
 
   static Database? _database;
   static const String _tableName = 'parcels';
+
+  static const String _inspectionTable = 'bus_inspections';
+  static const String _pricingRatesTable = 'pricing_rates';
 
   Future<Database> get database async {
     if (_database != null) return _database!;
@@ -23,9 +30,9 @@ class DatabaseHelper {
     final path = join(documentsDirectory.path, 'parcels_database.db');
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _createDb,
-      // onUpgrade: _onUpgrade, // For schema migrations
+      onUpgrade: _onUpgrade,
     );
   }
 
@@ -56,7 +63,47 @@ class DatabaseHelper {
       )
     ''');
     // Note: Removed Created_At and Ref_No as they are not in the Parcel model
+    await _createInspectionTable(db);
+    await _createPricingRatesTable(db);
     await _seedSampleParcels(db);
+  }
+
+  Future<void> _createInspectionTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $_inspectionTable (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        bus_identifier TEXT NOT NULL,
+        inspector_name TEXT,
+        inspection_date TEXT NOT NULL,
+        fields_json TEXT NOT NULL,
+        is_synced INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+  }
+
+  Future<void> _createPricingRatesTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $_pricingRatesTable (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        key TEXT,
+        location_from TEXT,
+        location_to TEXT,
+        weight_from REAL,
+        weight_to REAL,
+        subsequent REAL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    ''');
+  }
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await _createInspectionTable(db);
+      await _createPricingRatesTable(db);
+    }
   }
 
   Future<void> _seedSampleParcels(Database db) async {
@@ -123,18 +170,22 @@ class DatabaseHelper {
       final cycleIndex = index % origins.length;
       final sentDate = now.subtract(Duration(days: (index * 2) + cycleIndex));
       final routeDuration = 1 + (index % 4);
-      final outForDelivery = status == ParcelStatus.pending
-          ? null
-          : sentDate.add(Duration(hours: 6 + (index % 5) * 2));
-      final deliveredDate = (status == ParcelStatus.received || status == ParcelStatus.collected)
-          ? sentDate.add(Duration(days: routeDuration))
-          : null;
-      final collectedDate = status == ParcelStatus.collected
-          ? sentDate.add(Duration(days: routeDuration + 1))
-          : null;
-      final returnedDate = (status == ParcelStatus.pending && index % 7 == 3)
-          ? sentDate.add(Duration(days: routeDuration + 2))
-          : null;
+      final outForDelivery =
+          status == ParcelStatus.pending
+              ? null
+              : sentDate.add(Duration(hours: 6 + (index % 5) * 2));
+      final deliveredDate =
+          (status == ParcelStatus.received || status == ParcelStatus.collected)
+              ? sentDate.add(Duration(days: routeDuration))
+              : null;
+      final collectedDate =
+          status == ParcelStatus.collected
+              ? sentDate.add(Duration(days: routeDuration + 1))
+              : null;
+      final returnedDate =
+          (status == ParcelStatus.pending && index % 7 == 3)
+              ? sentDate.add(Duration(days: routeDuration + 2))
+              : null;
       final whoPays = WhoToPay.values[index % WhoToPay.values.length];
 
       return Parcel(
@@ -153,7 +204,8 @@ class DatabaseHelper {
         Vehicle: vehicles[index % vehicles.length],
         Who_to_Pay: whoPays,
         Amount_Paid: (1350 + (index * 55) + (cycleIndex * 10)).toDouble(),
-        Paid: status == ParcelStatus.collected ||
+        Paid:
+            status == ParcelStatus.collected ||
             status == ParcelStatus.received && index.isOdd ||
             index % 5 == 0,
         Date_Delivered: deliveredDate,
@@ -184,10 +236,9 @@ class DatabaseHelper {
     return await db.insert(
       _tableName,
       parcel.toDbMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace, // Replace if Document_No already exists
+      conflictAlgorithm:
+          ConflictAlgorithm.replace, // Replace if Document_No already exists
     );
-
-    
   }
 
   /// Retrieves a single parcel by its Document_No.
@@ -252,5 +303,98 @@ class DatabaseHelper {
   //     return Parcel.fromDbMap(maps[i]);
   //   });
   // }
-}
+  Future<int> insertInspection(BusInspection inspection) async {
+    final db = await database;
+    return db.insert(
+      _inspectionTable,
+      inspection.toDbMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
 
+  Future<int> updateInspection(BusInspection inspection) async {
+    if (inspection.id == null) {
+      throw ArgumentError('Cannot update an inspection without an id');
+    }
+    final db = await database;
+    return db.update(
+      _inspectionTable,
+      inspection.toDbMap(),
+      where: 'id = ?',
+      whereArgs: <Object?>[inspection.id],
+    );
+  }
+
+  Future<List<BusInspection>> getAllInspections() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      _inspectionTable,
+      orderBy: 'inspection_date DESC',
+    );
+    return maps.map(BusInspection.fromDbMap).toList();
+  }
+
+  Future<List<BusInspection>> getPendingInspections() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      _inspectionTable,
+      where: 'is_synced = ?',
+      whereArgs: const <Object?>[0],
+      orderBy: 'inspection_date DESC',
+    );
+    return maps.map(BusInspection.fromDbMap).toList();
+  }
+
+  Future<BusInspection?> getInspectionById(int id) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      _inspectionTable,
+      where: 'id = ?',
+      whereArgs: <Object?>[id],
+      limit: 1,
+    );
+    if (maps.isEmpty) {
+      return null;
+    }
+    return BusInspection.fromDbMap(maps.first);
+  }
+
+  Future<int> markInspectionSynced(int id) async {
+    final db = await database;
+    return db.update(
+      _inspectionTable,
+      <String, Object?>{
+        'is_synced': 1,
+        'updated_at': DateTime.now().toIso8601String(),
+      },
+      where: 'id = ?',
+      whereArgs: <Object?>[id],
+    );
+  }
+
+  Future<int> deleteInspection(int id) async {
+    final db = await database;
+    return db.delete(
+      _inspectionTable,
+      where: 'id = ?',
+      whereArgs: <Object?>[id],
+    );
+  }
+
+  // --- Pricing Rates Operations ---
+  Future<int> insertPricingRate(PricingRate rate) async {
+    final db = await database;
+    return await db.insert(_pricingRatesTable, rate.toJson());
+  }
+
+  Future<List<PricingRate>> getPricingRates() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(_pricingRatesTable);
+    return maps.map((map) => PricingRate.fromJson(map)).toList();
+  }
+
+  Future<int> deleteAllPricingRates() async {
+    final db = await database;
+    return await db.delete(_pricingRatesTable);
+  }
+}

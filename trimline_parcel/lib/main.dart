@@ -14,11 +14,9 @@ void main() {
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
-
   @override
   Widget build(BuildContext context) {
     Get.put(ParcelController());
-
     return GetMaterialApp(
       title: 'Parcel Tracker',
       theme: _buildLightTheme(),

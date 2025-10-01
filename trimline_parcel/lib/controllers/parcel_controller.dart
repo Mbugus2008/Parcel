@@ -1,13 +1,19 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:bluetooth_print/bluetooth_print_model.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:http/http.dart' as http;
 
 import '../database/database_helper.dart';
 import '../models/Parcel_Details.dart';
 import '../models/parcel_model.dart';
+import '../models/pricing_rate.dart';
+import '../services/bluetooth_print_service.dart';
 
 class ParcelController extends GetxController {
   ParcelController({Parcel? initialParcel}) {
@@ -16,6 +22,15 @@ class ParcelController extends GetxController {
   }
 
   final DatabaseHelper _dbHelper = DatabaseHelper();
+
+  final BluetoothPrintService _bluetoothService = BluetoothPrintService();
+
+  StreamSubscription<List<BluetoothDevice>>? _printerScanSub;
+
+  final RxList<BluetoothDevice> _availablePrinters = <BluetoothDevice>[].obs;
+  final RxBool _isScanningPrinters = false.obs;
+  final RxBool _isPrinting = false.obs;
+  final Rx<BluetoothDevice?> _activePrinter = Rx<BluetoothDevice?>(null);
 
   final RxList<Parcel> _parcels = <Parcel>[].obs;
   final RxList<Parcel> _filteredParcels = <Parcel>[].obs;
@@ -33,11 +48,28 @@ class ParcelController extends GetxController {
   Parcel? parcel;
 
   List<Parcel> get parcels => _parcels;
+  List<Parcel> get pendingParcels =>
+      _parcels
+          .where(
+            (parcel) =>
+                (parcel.Status ?? ParcelStatus.pending) == ParcelStatus.pending,
+          )
+          .toList();
   List<Parcel> get filteredParcels => _filteredParcels;
   bool get isLoading => _isLoading.value;
   String get searchQuery => _searchQuery.value;
   ParcelStatus? get statusFilter => _statusFilter.value;
   List<ParcelStatus> get supportedStatuses => _statusOrder;
+
+  List<BluetoothDevice> get availablePrinters => _availablePrinters;
+  bool get isScanningPrinters => _isScanningPrinters.value;
+  bool get isPrinting => _isPrinting.value;
+  BluetoothDevice? get activePrinter => _activePrinter.value;
+
+  RxList<BluetoothDevice> get availablePrintersRx => _availablePrinters;
+  RxBool get isScanningPrintersRx => _isScanningPrinters;
+  RxBool get isPrintingRx => _isPrinting;
+  Rx<BluetoothDevice?> get activePrinterRx => _activePrinter;
 
   // Expose reactive values for UI observers (Obx/GetX)
   RxList<Parcel> get parcelsRx => _parcels;
@@ -96,9 +128,26 @@ class ParcelController extends GetxController {
   RxString deliveryinformationError = ''.obs;
   RxString paymentinformationError = ''.obs;
 
+  // Field-specific error observables (used to show error only on the invalid TextFormField)
+  RxString amountPaidError = ''.obs;
+  RxString fromError = ''.obs;
+  RxString toError = ''.obs;
+  RxString senderNameFieldError = ''.obs;
+  RxString receiverNameFieldError = ''.obs;
+  RxString receiverPhoneFieldError = ''.obs;
+  RxString vehicleFieldError = ''.obs;
+  RxString driverFieldError = ''.obs;
+  RxString senderPhoneFieldError = ''.obs;
+
+  // Items step error
+  RxString itemsError = ''.obs;
+
   @override
   void onInit() {
     super.onInit();
+    _printerScanSub = _bluetoothService.scanResults.listen((devices) {
+      _availablePrinters.assignAll(devices);
+    });
     loadParcels();
   }
 
@@ -165,6 +214,112 @@ class ParcelController extends GetxController {
     _filteredParcels.assignAll(filtered);
   }
 
+  Future<void> refreshPrinters({
+    Duration timeout = const Duration(seconds: 6),
+  }) async {
+    if (_isScanningPrinters.value) {
+      return;
+    }
+    _isScanningPrinters.value = true;
+    try {
+      await _bluetoothService.startScan(timeout: timeout);
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Printer scan error: ');
+      }
+      Get.snackbar(
+        'Bluetooth scan failed',
+        'Unable to find printers. Ensure Bluetooth is on and the printer is discoverable.',
+        snackPosition: SnackPosition.BOTTOM,
+      );
+    } finally {
+      await _bluetoothService.stopScan();
+      _isScanningPrinters.value = false;
+    }
+  }
+
+  Future<void> selectPrinter(BluetoothDevice device) async {
+    try {
+      await _bluetoothService.ensureConnection(device);
+      _activePrinter.value = device;
+      Get.snackbar(
+        'Printer ready',
+        device.name ?? device.address ?? 'Bluetooth printer connected.',
+        snackPosition: SnackPosition.BOTTOM,
+      );
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Printer connection failed: ');
+      }
+      Get.snackbar(
+        'Connection failed',
+        'Unable to connect to the selected printer.',
+        snackPosition: SnackPosition.BOTTOM,
+      );
+    }
+  }
+
+  Future<void> disconnectPrinter() async {
+    try {
+      await _bluetoothService.disconnect();
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Printer disconnect failed: ');
+      }
+    } finally {
+      _activePrinter.value = null;
+    }
+  }
+
+  Future<void> printPendingParcelsViaBluetooth() async {
+    if (_isPrinting.value) {
+      return;
+    }
+    final device = _activePrinter.value;
+    if (device == null) {
+      Get.snackbar(
+        'No printer selected',
+        'Choose a Bluetooth printer before printing.',
+        snackPosition: SnackPosition.BOTTOM,
+      );
+      return;
+    }
+
+    final items = pendingParcels;
+    if (items.isEmpty) {
+      Get.snackbar(
+        'Nothing to print',
+        'There are no pending parcels at the moment.',
+        snackPosition: SnackPosition.BOTTOM,
+      );
+      return;
+    }
+
+    _isPrinting.value = true;
+    try {
+      await _bluetoothService.printPendingParcels(
+        parcels: items,
+        device: device,
+      );
+      Get.snackbar(
+        'Print job sent',
+        'Pending parcels dispatched to the printer.',
+        snackPosition: SnackPosition.BOTTOM,
+      );
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Printing failed: ');
+      }
+      Get.snackbar(
+        'Print failed',
+        'Could not complete printing. Check the printer and try again.',
+        snackPosition: SnackPosition.BOTTOM,
+      );
+    } finally {
+      _isPrinting.value = false;
+    }
+  }
+
   void addParcelDetail() {
     final docNo =
         documentNoController.text.isEmpty ? 'TEMP-' : documentNoController.text;
@@ -177,6 +332,28 @@ class ParcelController extends GetxController {
         Remarks: '',
       ),
     );
+  }
+
+  void removeParcelDetail(int index) {
+    if (parcel != null && index >= 0 && index < parcel!.parcelDetails.length) {
+      parcel!.parcelDetails.removeAt(index);
+    }
+  }
+
+  void updateParcelDetail(
+    int index,
+    String description,
+    double amount,
+    String remarks,
+  ) {
+    if (parcel != null && index >= 0 && index < parcel!.parcelDetails.length) {
+      parcel!.parcelDetails[index] = Parcel_Details(
+        Document_No: parcel!.parcelDetails[index].Document_No,
+        Description: description,
+        Amount: amount,
+        Remarks: remarks,
+      );
+    }
   }
 
   Future<void> updateParcelStatus(Parcel parcel, ParcelStatus newStatus) async {
@@ -326,6 +503,12 @@ class ParcelController extends GetxController {
     return fresh;
   }
 
+  @override
+  void onClose() {
+    _printerScanSub?.cancel();
+    super.onClose();
+  }
+
   Future<String> _generateDocumentNumber() async {
     try {
       final deviceInfo = DeviceInfoPlugin();
@@ -404,4 +587,28 @@ class ParcelController extends GetxController {
   }
 
   void PopulateFormWithParcel(Parcel parcel) => populateFormWithParcel(parcel);
+
+  Future<void> fetchAndSavePricingRates(String url) async {
+    try {
+      final response = await http.get(Uri.parse(url));
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(response.body);
+        final rates = data.map((item) => PricingRate.fromJson(item)).toList();
+
+        // Delete existing rates
+        await _dbHelper.deleteAllPricingRates();
+
+        // Insert new rates
+        for (final rate in rates) {
+          await _dbHelper.insertPricingRate(rate);
+        }
+
+        Get.snackbar('Success', 'Pricing rates updated successfully');
+      } else {
+        Get.snackbar('Error', 'Failed to fetch pricing rates');
+      }
+    } catch (e) {
+      Get.snackbar('Error', 'Error fetching pricing rates: $e');
+    }
+  }
 }
