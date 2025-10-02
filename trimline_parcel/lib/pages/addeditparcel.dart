@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
@@ -24,18 +26,28 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
 
   late final VoidCallback _fieldsListener;
 
+  Timer? _debounceTimer; // debounce rapid listener updates
+
   @override
   void initState() {
     super.initState();
     controller.parcel = widget.parcel;
+
+    // Defer heavy population work to after the first frame to avoid blocking navigation
     if (widget.parcel != null) {
-      controller.PopulateFormWithParcel(widget.parcel!);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        controller.PopulateFormWithParcel(widget.parcel!);
+      });
     }
 
     // Live-update step errors when relevant fields change
     _fieldsListener = () {
       _updateStepErrors();
-      if (mounted) setState(() {});
+      // Debounce rapid state updates (typing) to avoid excessive rebuild work on main thread
+      _debounceTimer?.cancel();
+      _debounceTimer = Timer(const Duration(milliseconds: 150), () {
+        if (mounted) setState(() {});
+      });
     };
 
     controller.documentNoController.addListener(_fieldsListener);
@@ -49,8 +61,11 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
     controller.driverController.addListener(_fieldsListener);
     controller.senderPhoneController.addListener(_fieldsListener);
 
-    // initialize error states
-    _updateStepErrors();
+    // initialize error states after first frame to avoid blocking navigation
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _updateStepErrors();
+      if (mounted) setState(() {});
+    });
   }
 
   @override
@@ -67,6 +82,7 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
       controller.driverController.removeListener(_fieldsListener);
       controller.senderPhoneController.removeListener(_fieldsListener);
     } catch (_) {}
+    _debounceTimer?.cancel();
     super.dispose();
   }
 
@@ -453,7 +469,7 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
                           ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.18),
+                      color: Colors.black.withOpacity(0.18),
                       blurRadius: 12,
                       offset: const Offset(0, 8),
                     ),
@@ -522,11 +538,11 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
       padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
-        color: Colors.white.withValues(alpha: 0.06),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        color: Colors.white.withOpacity(0.06),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.25),
+            color: Colors.black.withOpacity(0.25),
             blurRadius: 18,
             offset: const Offset(0, 12),
           ),
@@ -695,9 +711,9 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
             padding: const EdgeInsets.symmetric(vertical: 2),
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.05),
+              color: Colors.white.withOpacity(0.05),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
+              border: Border.all(color: Colors.white.withOpacity(0.07)),
             ),
             child: const Text(
               'No parcel items yet. Tap the + button to add.',
@@ -759,8 +775,8 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(18),
-        color: Colors.white.withValues(alpha: 0.05),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        color: Colors.white.withOpacity(0.05),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
       ),
       child: Row(
         children: [
@@ -793,7 +809,7 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
           ),
           Switch.adaptive(
             value: controller.paid,
-            activeTrackColor: Colors.greenAccent.withValues(alpha: 0.4),
+            activeTrackColor: Colors.greenAccent.withOpacity(0.4),
             activeThumbColor: Colors.greenAccent,
             onChanged: (value) {
               setState(() {
@@ -811,8 +827,8 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14),
-        color: Colors.white.withValues(alpha: 0.1),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+        color: Colors.white.withOpacity(0.1),
+        border: Border.all(color: Colors.white.withOpacity(0.1)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -846,8 +862,8 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(18),
-          color: Colors.white.withValues(alpha: 0.06),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+          color: Colors.white.withOpacity(0.06),
+          border: Border.all(color: Colors.white.withOpacity(0.08)),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -920,7 +936,7 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
     final bool showError = (error?.value.isNotEmpty ?? false);
     final baseBorder = OutlineInputBorder(
       borderRadius: BorderRadius.circular(18),
-      borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.18)),
+      borderSide: BorderSide(color: Colors.white.withOpacity(0.18)),
     );
 
     return TextFormField(
@@ -931,7 +947,7 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
       cursorColor: Colors.white,
       decoration: (decoration ?? const InputDecoration()).copyWith(
         filled: true,
-        fillColor: Colors.white.withValues(alpha: 0.07),
+        fillColor: Colors.white.withOpacity(0.07),
         labelText: label,
         labelStyle: TextStyle(
           // Only show red when the field-specific error is set; otherwise use neutral color
@@ -1030,17 +1046,17 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
                             labelText: 'Description',
                             labelStyle: const TextStyle(color: Colors.white70),
                             filled: true,
-                            fillColor: Colors.white.withValues(alpha: 0.07),
+                            fillColor: Colors.white.withOpacity(0.07),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(18),
                               borderSide: BorderSide(
-                                color: Colors.white.withValues(alpha: 0.18),
+                                color: Colors.white.withOpacity(0.18),
                               ),
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(18),
                               borderSide: BorderSide(
-                                color: Colors.white.withValues(alpha: 0.18),
+                                color: Colors.white.withOpacity(0.18),
                               ),
                             ),
                             focusedBorder: OutlineInputBorder(
@@ -1059,17 +1075,17 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
                             labelText: 'Amount',
                             labelStyle: const TextStyle(color: Colors.white70),
                             filled: true,
-                            fillColor: Colors.white.withValues(alpha: 0.07),
+                            fillColor: Colors.white.withOpacity(0.07),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(18),
                               borderSide: BorderSide(
-                                color: Colors.white.withValues(alpha: 0.18),
+                                color: Colors.white.withOpacity(0.18),
                               ),
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(18),
                               borderSide: BorderSide(
-                                color: Colors.white.withValues(alpha: 0.18),
+                                color: Colors.white.withOpacity(0.18),
                               ),
                             ),
                             focusedBorder: OutlineInputBorder(
@@ -1089,17 +1105,17 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
                             labelText: 'Remarks',
                             labelStyle: const TextStyle(color: Colors.white70),
                             filled: true,
-                            fillColor: Colors.white.withValues(alpha: 0.07),
+                            fillColor: Colors.white.withOpacity(0.07),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(18),
                               borderSide: BorderSide(
-                                color: Colors.white.withValues(alpha: 0.18),
+                                color: Colors.white.withOpacity(0.18),
                               ),
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(18),
                               borderSide: BorderSide(
-                                color: Colors.white.withValues(alpha: 0.18),
+                                color: Colors.white.withOpacity(0.18),
                               ),
                             ),
                             focusedBorder: OutlineInputBorder(

@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:bluetooth_print/bluetooth_print_model.dart';
+import 'package:flutter_pos_printer_platform_image_3/flutter_pos_printer_platform_image_3.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -25,12 +25,12 @@ class ParcelController extends GetxController {
 
   final BluetoothPrintService _bluetoothService = BluetoothPrintService();
 
-  StreamSubscription<List<BluetoothDevice>>? _printerScanSub;
+  StreamSubscription<List<PrinterDevice>>? _printerScanSub;
 
-  final RxList<BluetoothDevice> _availablePrinters = <BluetoothDevice>[].obs;
+  final RxList<PrinterDevice> _availablePrinters = <PrinterDevice>[].obs;
   final RxBool _isScanningPrinters = false.obs;
   final RxBool _isPrinting = false.obs;
-  final Rx<BluetoothDevice?> _activePrinter = Rx<BluetoothDevice?>(null);
+  final Rx<PrinterDevice?> _activePrinter = Rx<PrinterDevice?>(null);
 
   final RxList<Parcel> _parcels = <Parcel>[].obs;
   final RxList<Parcel> _filteredParcels = <Parcel>[].obs;
@@ -61,15 +61,15 @@ class ParcelController extends GetxController {
   ParcelStatus? get statusFilter => _statusFilter.value;
   List<ParcelStatus> get supportedStatuses => _statusOrder;
 
-  List<BluetoothDevice> get availablePrinters => _availablePrinters;
+  List<PrinterDevice> get availablePrinters => _availablePrinters;
   bool get isScanningPrinters => _isScanningPrinters.value;
   bool get isPrinting => _isPrinting.value;
-  BluetoothDevice? get activePrinter => _activePrinter.value;
+  PrinterDevice? get activePrinter => _activePrinter.value;
 
-  RxList<BluetoothDevice> get availablePrintersRx => _availablePrinters;
+  RxList<PrinterDevice> get availablePrintersRx => _availablePrinters;
   RxBool get isScanningPrintersRx => _isScanningPrinters;
   RxBool get isPrintingRx => _isPrinting;
-  Rx<BluetoothDevice?> get activePrinterRx => _activePrinter;
+  Rx<PrinterDevice?> get activePrinterRx => _activePrinter;
 
   // Expose reactive values for UI observers (Obx/GetX)
   RxList<Parcel> get parcelsRx => _parcels;
@@ -148,6 +148,7 @@ class ParcelController extends GetxController {
     _printerScanSub = _bluetoothService.scanResults.listen((devices) {
       _availablePrinters.assignAll(devices);
     });
+    Future.microtask(_restoreSavedPrinter);
     loadParcels();
   }
 
@@ -214,6 +215,43 @@ class ParcelController extends GetxController {
     _filteredParcels.assignAll(filtered);
   }
 
+  Future<void> _restoreSavedPrinter() async {
+    try {
+      final saved = await _bluetoothService.loadPreferredPrinter();
+      if (saved == null) {
+        return;
+      }
+
+      _activePrinter.value = saved;
+      if (!_availablePrinters.any(
+        (printer) => _isSamePrinter(printer, saved),
+      )) {
+        _availablePrinters.add(saved);
+      }
+
+      try {
+        await _bluetoothService.ensureConnection(saved);
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('Auto-connect to saved printer failed: $e');
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Failed to restore saved printer: $e');
+      }
+    }
+  }
+
+  bool _isSamePrinter(PrinterDevice a, PrinterDevice b) {
+    final addrA = a.address?.trim();
+    final addrB = b.address?.trim();
+    if (addrA?.isNotEmpty == true && addrB?.isNotEmpty == true) {
+      return addrA == addrB;
+    }
+    return a.name.trim() == b.name.trim();
+  }
+
   Future<void> refreshPrinters({
     Duration timeout = const Duration(seconds: 6),
   }) async {
@@ -238,13 +276,23 @@ class ParcelController extends GetxController {
     }
   }
 
-  Future<void> selectPrinter(BluetoothDevice device) async {
+  Future<void> selectPrinter(PrinterDevice device) async {
     try {
       await _bluetoothService.ensureConnection(device);
+      if (!_availablePrinters.any(
+        (printer) => _isSamePrinter(printer, device),
+      )) {
+        _availablePrinters.add(device);
+      }
       _activePrinter.value = device;
+      await _bluetoothService.savePreferredPrinter(device);
+      final displayName =
+          device.name.trim().isNotEmpty
+              ? device.name.trim()
+              : (device.address ?? 'Bluetooth printer connected.');
       Get.snackbar(
         'Printer ready',
-        device.name ?? device.address ?? 'Bluetooth printer connected.',
+        displayName,
         snackPosition: SnackPosition.BOTTOM,
       );
     } catch (e) {
@@ -262,6 +310,7 @@ class ParcelController extends GetxController {
   Future<void> disconnectPrinter() async {
     try {
       await _bluetoothService.disconnect();
+      await _bluetoothService.clearPreferredPrinter();
     } catch (e) {
       if (kDebugMode) {
         debugPrint('Printer disconnect failed: ');
@@ -269,6 +318,115 @@ class ParcelController extends GetxController {
     } finally {
       _activePrinter.value = null;
     }
+  }
+
+
+
+
+Future<void> dispatchParcelWithDetails(
+  Parcel parcel, {
+  String? driver,
+  String? vehicle,
+}) async {
+  final trimmedDriver = driver?.trim();
+  final trimmedVehicle = vehicle?.trim();
+
+  var working = parcel;
+  final hasDriverChange =
+      (trimmedDriver ?? '') != (parcel.Driver?.trim() ?? '');
+  final hasVehicleChange =
+      (trimmedVehicle ?? '') != (parcel.Vehicle?.trim() ?? '');
+
+  if (hasDriverChange || hasVehicleChange) {
+    working = parcel.copyWith(
+      Driver: trimmedDriver?.isNotEmpty == true ? trimmedDriver : null,
+      Vehicle: trimmedVehicle?.isNotEmpty == true ? trimmedVehicle : null,
+    );
+    try {
+      await _dbHelper.updateParcel(working);
+      final index = _parcels.indexWhere(
+        (p) => p.Document_No == working.Document_No,
+      );
+      if (index != -1) {
+        _parcels[index] = working;
+        _parcels.refresh();
+      }
+      _filterParcels();
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Failed to update parcel transport info: ' + e.toString());
+      }
+      Get.snackbar(
+        'Error',
+        'Unable to save driver or vehicle details. Please try again.',
+        snackPosition: SnackPosition.BOTTOM,
+      );
+      return;
+    }
+  }
+
+  await dispatchParcel(working);
+}
+
+
+  Future<void> dispatchParcel(Parcel parcel) async {
+    final currentStatus = parcel.Status ?? ParcelStatus.pending;
+    if (currentStatus != ParcelStatus.pending) {
+      await updateParcelStatus(parcel, ParcelStatus.inTransit);
+      return;
+    }
+
+    final device = _activePrinter.value;
+    if (device == null) {
+      Get.snackbar(
+        'No printer selected',
+        'Choose a Bluetooth printer before printing.',
+        snackPosition: SnackPosition.BOTTOM,
+      );
+      return;
+    }
+
+    if (_isPrinting.value) {
+      Get.snackbar(
+        'Printer busy',
+        'Please wait for the current print job to finish.',
+        snackPosition: SnackPosition.BOTTOM,
+      );
+      return;
+    }
+
+    var printed = false;
+    _isPrinting.value = true;
+    try {
+      await _bluetoothService.printParcelDispatchTicket(
+        parcel: parcel,
+        device: device,
+      );
+      printed = true;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Dispatch printing failed: ' + e.toString());
+      }
+      Get.snackbar(
+        'Print failed',
+        'Could not print the dispatch ticket. Check the printer and try again.',
+        snackPosition: SnackPosition.BOTTOM,
+      );
+    } finally {
+      _isPrinting.value = false;
+    }
+
+    if (!printed) {
+      return;
+    }
+
+    Get.snackbar(
+      'Print job sent',
+      'Dispatch ticket sent to the printer.',
+      snackPosition: SnackPosition.BOTTOM,
+    );
+
+    await updateParcelStatus(parcel, ParcelStatus.inTransit);
   }
 
   Future<void> printPendingParcelsViaBluetooth() async {

@@ -1,5 +1,5 @@
-import 'package:bluetooth_print/bluetooth_print_model.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_pos_printer_platform_image_3/flutter_pos_printer_platform_image_3.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 
@@ -96,20 +96,23 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
 
           child:
               _isSearching
-                  ? _buildSearchField(
-                    context,
-
-                    autofocus: true,
-
-                    onSubmitted: () => setState(() => _isSearching = false),
-
-                    fieldKey: const ValueKey('search-field'),
+                  ? Row(
+                    // ensure search field fills the app bar area
+                    children: [
+                      Expanded(
+                        child: _buildSearchField(
+                          context,
+                          autofocus: true,
+                          onSubmitted:
+                              () => setState(() => _isSearching = false),
+                          fieldKey: const ValueKey('search-field'),
+                        ),
+                      ),
+                    ],
                   )
                   : Row(
                     key: const ValueKey('title'),
-
                     mainAxisSize: MainAxisSize.min,
-
                     children: [
                       const Text('Parcel Dashboard'),
 
@@ -182,48 +185,49 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
             IconButton(
               tooltip: 'Search parcels',
 
-              onPressed: () => setState(() => _isSearching = true),
+              onPressed: () {
+                // populate the field with any existing query and show search
+                _searchController.text = _controller.searchQuery;
+                setState(() => _isSearching = true);
+              },
 
               icon: const Icon(Icons.search, color: Colors.white),
             ),
 
-          Obx(() {
-            final isPrinterConnected = _controller.activePrinter != null;
-            return IconButton(
-              tooltip:
-                  isPrinterConnected
-                      ? 'Print pending parcels (connected)'
-                      : 'Print pending parcels',
-              onPressed: _openPrinterSheet,
-              icon: Icon(
-                Icons.print_rounded,
-                color:
-                    isPrinterConnected ? Colors.lightGreenAccent : Colors.white,
-              ),
-            );
-          }),
-
-          IconButton(
-            tooltip: 'Filter by status',
-
-            // TODO: Add dropdown instead of buttomsheet
-            onPressed: _openFilterSheet,
-
-            icon: Icon(
-              Icons.filter_list_rounded,
-
-              color: hasActiveFilters ? Colors.amberAccent : Colors.white,
-            ),
-          ),
-
-          if (hasActiveFilters)
+          // hide the rest of the actions while searching
+          if (!_isSearching) ...[
             IconButton(
-              tooltip: 'Clear filters',
+              tooltip: 'Filter by status',
 
-              onPressed: _onClearFilters,
+              // TODO: Add dropdown instead of buttomsheet
+              onPressed: _openFilterSheet,
 
-              icon: const Icon(Icons.clear_all_rounded, color: Colors.white70),
+              icon: Icon(
+                Icons.filter_list_rounded,
+
+                color: hasActiveFilters ? Colors.amberAccent : Colors.white,
+              ),
             ),
+
+            if (hasActiveFilters)
+              IconButton(
+                tooltip: 'Clear filters',
+
+                onPressed: _onClearFilters,
+
+                icon: const Icon(
+                  Icons.clear_all_rounded,
+                  color: Colors.white70,
+                ),
+              ),
+
+            IconButton(
+              onPressed: () => Get.to(() => const AddEditParcelPage()),
+              icon: const Icon(Icons.add_rounded),
+              color: Colors.white,
+              tooltip: 'Add parcel',
+            ),
+          ],
         ],
       ),
       drawer: _buildDrawer(context),
@@ -641,7 +645,7 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
 
   Widget _buildActivePrinterBanner({
     required ThemeData theme,
-    required BluetoothDevice device,
+    required PrinterDevice device,
   }) {
     final displayName =
         (device.name?.trim().isNotEmpty ?? false)
@@ -694,7 +698,7 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
 
   Widget _buildPrinterTile({
     required ThemeData theme,
-    required BluetoothDevice device,
+    required PrinterDevice device,
     required bool isActive,
     required VoidCallback onTap,
   }) {
@@ -1654,11 +1658,7 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
                     Align(
                       alignment: Alignment.centerRight,
                       child: ElevatedButton(
-                        onPressed:
-                            () => _controller.updateParcelStatus(
-                              parcel,
-                              ParcelStatus.inTransit,
-                            ),
+                        onPressed: () => _showDispatchDialog(context, parcel),
                         child: const Text('Dispatch'),
                       ),
                     ),
@@ -1687,6 +1687,62 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
       ),
     );
   }
+
+  Future<void> _showDispatchDialog(BuildContext context, Parcel parcel) async {
+    final driverController = TextEditingController(text: parcel.Driver ?? '');
+    final vehicleController = TextEditingController(text: parcel.Vehicle ?? '');
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Prepare Dispatch'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: driverController,
+                decoration: const InputDecoration(
+                  labelText: 'Driver name',
+                  hintText: 'Enter driver responsible',
+                ),
+                textCapitalization: TextCapitalization.words,
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: vehicleController,
+                decoration: const InputDecoration(
+                  labelText: 'Vehicle',
+                  hintText: 'Enter vehicle registration',
+                ),
+                textCapitalization: TextCapitalization.characters,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final driver = driverController.text.trim();
+                final vehicle = vehicleController.text.trim();
+                Navigator.of(dialogContext).pop();
+                _controller.dispatchParcelWithDetails(
+                  parcel,
+                  driver: driver,
+                  vehicle: vehicle,
+                );
+              },
+              child: const Text('Dispatch'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
 
   Drawer _buildDrawer(BuildContext context) {
     final theme = Theme.of(context);
@@ -1747,6 +1803,30 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
                 Future.microtask(_openFilterSheet);
               },
             ),
+
+            Obx(() {
+              final device = _controller.activePrinter;
+              final subtitleText = () {
+                if (device == null) {
+                  return 'No printer selected';
+                }
+                final name = device.name.trim();
+                if (name.isNotEmpty) {
+                  return name;
+                }
+                final address = device.address?.trim() ?? '';
+                return address.isNotEmpty ? address : 'No printer selected';
+              }();
+              return ListTile(
+                leading: const Icon(Icons.print_rounded),
+                title: const Text('Printer settings'),
+                subtitle: Text(subtitleText, style: theme.textTheme.bodySmall),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  Future.microtask(_openPrinterSheet);
+                },
+              );
+            }),
 
             const Divider(),
 

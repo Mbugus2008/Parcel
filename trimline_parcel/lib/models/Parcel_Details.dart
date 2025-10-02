@@ -72,26 +72,25 @@ class Parcel_Details {
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
-  
+
     return other is Parcel_Details &&
-      other.Key == Key &&
-      other.Document_No == Document_No &&
-      other.No_Of_Items == No_Of_Items &&
-      other.Description == Description &&
-      other.Amount == Amount &&
-      other.Remarks == Remarks &&
-      other.Weight == Weight;
+        other.Key == Key &&
+        other.Document_No == Document_No &&
+        other.No_Of_Items == No_Of_Items &&
+        other.Description == Description &&
+        other.Amount == Amount &&
+        other.Remarks == Remarks &&
+        other.Weight == Weight;
   }
 
   @override
   int get hashCode {
     return Key.hashCode ^
-      Document_No.hashCode ^
-      No_Of_Items.hashCode ^
-      Description.hashCode ^
-      Amount.hashCode ^
-      Remarks.hashCode ^
-      Weight.hashCode;
+        Document_No.hashCode ^
+        No_Of_Items.hashCode ^
+        Description.hashCode ^
+        Amount.hashCode ^
+        Remarks.hashCode ^
+        Weight.hashCode;
   }
 }
-

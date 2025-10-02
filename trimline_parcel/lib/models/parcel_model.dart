@@ -79,7 +79,6 @@ class Parcel {
       'Date_Returned': Date_Returned?.toIso8601String(),
       'Notes': Notes,
       'Details': parcelDetails.map((d) => d.toJson()).toList(),
-      
     };
   }
 
