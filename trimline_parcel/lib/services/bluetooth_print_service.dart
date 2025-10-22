@@ -32,6 +32,15 @@ class BluetoothPrintService {
 
   PrinterDevice? _selectedDevice;
 
+  // Default receipt header used for printed parcel receipts
+  static const String _defaultReceiptHeader = '''PARCEL CASH RECEIPT
+REMBO CLASSIC SERVICES LTD
+PSV: “For all your quality services & safety”
+
+NOTE
+GOODS CARRIED AT OWNER’S RISK
+''';
+
   PrinterDevice? get selectedDevice => _selectedDevice;
 
   Stream<List<PrinterDevice>> get scanResults => _scanController.stream;
@@ -43,36 +52,35 @@ class BluetoothPrintService {
     await stopScan();
     _devices.clear();
     _scanController.add(const []);
-
     _scanSubscription = _printerManager
         .discovery(type: PrinterType.bluetooth, isBle: isBle)
         .listen(
-          (device) {
-            if (device.address == null && device.name.isEmpty) {
-              return;
-            }
-            final alreadyAdded = _devices.any((existing) {
-              if (device.address != null && device.address!.isNotEmpty) {
-                return existing.address == device.address;
-              }
-              return existing.address == null && existing.name == device.name;
-            });
-            if (alreadyAdded) {
-              return;
-            }
-            _devices.add(device);
-            _scanController.add(List.unmodifiable(_devices));
-          },
-          onError: (error, stackTrace) {
-            if (kDebugMode) {
-              debugPrint('Printer scan error: $error');
-            }
-            _scanController.addError(error, stackTrace);
-          },
-          onDone: () {
-            _scanController.add(List.unmodifiable(_devices));
-          },
-        );
+      (device) {
+        if (device.address == null && device.name.isEmpty) {
+          return;
+        }
+        final alreadyAdded = _devices.any((existing) {
+          if (device.address != null && device.address!.isNotEmpty) {
+            return existing.address == device.address;
+          }
+          return existing.address == null && existing.name == device.name;
+        });
+        if (alreadyAdded) {
+          return;
+        }
+        _devices.add(device);
+        _scanController.add(List.unmodifiable(_devices));
+      },
+      onError: (error, stackTrace) {
+        if (kDebugMode) {
+          debugPrint('Printer scan error: $error');
+        }
+        _scanController.addError(error, stackTrace);
+      },
+      onDone: () {
+        _scanController.add(List.unmodifiable(_devices));
+      },
+    );
 
     if (timeout > Duration.zero) {
       _scanTimer = Timer(timeout, () async {
@@ -145,7 +153,7 @@ class BluetoothPrintService {
   Future<void> printParcelDispatchTicket({
     required Parcel parcel,
     required PrinterDevice device,
-    String headerTitle = 'Parcel Dispatch Ticket',
+    String headerTitle = _defaultReceiptHeader,
   }) async {
     if (device.address == null || device.address!.isEmpty) {
       throw StateError('Selected printer does not expose a Bluetooth address.');
@@ -159,17 +167,68 @@ class BluetoothPrintService {
     final dispatchStatus = parcel.Status?.name ?? ParcelStatus.pending.name;
 
     final bytes = <int>[];
-    bytes.addAll(
-      generator.text(
-        _sanitizePrintable(headerTitle),
-        styles: const PosStyles(
+    // Print the multi-line header; split into lines and print each centered
+    // Print header with sensible sizing: big title, medium company, regular for other lines
+    final headerLines = headerTitle
+        .split('\n')
+        .map((l) => l.trim())
+        .where((l) => l.isNotEmpty)
+        .toList();
+    int? _underlineIndex;
+    for (var i = 0; i < headerLines.length; i++) {
+      var line = headerLines[i];
+      final PosStyles styles;
+
+      // Detect the NOTE line (case-insensitive) and mark it for underlining.
+      if (line.toUpperCase() == 'NOTE') {
+        _underlineIndex = i;
+        styles = const PosStyles(
           align: PosAlign.center,
           bold: true,
-          height: PosTextSize.size2,
-          width: PosTextSize.size2,
+          underline: true,
+          height: PosTextSize.size1,
+          width: PosTextSize.size1,
+        );
+      } else if (i == 1) {
+        // Second line (larger)
+        styles = const PosStyles(
+          align: PosAlign.center,
+          bold: true,
+          height: PosTextSize.size1,
+          width: PosTextSize.size1,
+        );
+      } else if (_underlineIndex != null && i == _underlineIndex + 1) {
+        // The line immediately after NOTE: printers typically don't support
+        // italic. We'll simulate an italic appearance by surrounding the text
+        // with slashes and printing it slightly smaller.
+        line = '/$line/';
+        styles = const PosStyles(
+          align: PosAlign.center,
+          height: PosTextSize.size1,
+          width: PosTextSize.size1,
+        );
+        // Clear underline index so only the next line is affected.
+        _underlineIndex = null;
+      } else if (i == 0) {
+        // First line (smaller)
+        styles = const PosStyles(
+          align: PosAlign.center,
+          bold: true,
+          height: PosTextSize.size1,
+          width: PosTextSize.size1,
+        );
+      } else {
+        // Remaining lines (standard)
+        styles = const PosStyles(align: PosAlign.center);
+      }
+
+      bytes.addAll(
+        generator.text(
+          _sanitizePrintable(line),
+          styles: styles,
         ),
-      ),
-    );
+      );
+    }
     bytes.addAll(
       generator.text(
         _sanitizePrintable('Generated: ' + nowLabel),
@@ -209,7 +268,8 @@ class BluetoothPrintService {
       );
     }
 
-    final senderLine = _formatContact(parcel.Sender_Name, parcel.Sender_Phone);
+    final senderLine = _formatContact(parcel.Sender_Name, parcel.Sender_Phone,
+        maskPhone: true);
     if (senderLine != null) {
       bytes.addAll(generator.text(_sanitizePrintable('Sender: ' + senderLine)));
     }
@@ -217,6 +277,7 @@ class BluetoothPrintService {
     final receiverLine = _formatContact(
       parcel.Receiver_Name,
       parcel.Receiver_Phone,
+      maskPhone: true,
     );
     if (receiverLine != null) {
       bytes.addAll(
@@ -227,10 +288,9 @@ class BluetoothPrintService {
     final driver = parcel.Driver?.trim();
     if (driver != null && driver.isNotEmpty) {
       final vehicle = parcel.Vehicle?.trim();
-      final driverLine =
-          vehicle != null && vehicle.isNotEmpty
-              ? 'Driver: ' + driver + ' (' + vehicle + ')'
-              : 'Driver: ' + driver;
+      final driverLine = vehicle != null && vehicle.isNotEmpty
+          ? 'Driver: ' + driver + ' (' + vehicle + ')'
+          : 'Driver: ' + driver;
       bytes.addAll(generator.text(_sanitizePrintable(driverLine)));
     }
 
@@ -284,17 +344,15 @@ class BluetoothPrintService {
       for (var i = 0; i < parcel.parcelDetails.length; i++) {
         final detail = parcel.parcelDetails[i];
         final hasDescription = detail.Description?.trim().isNotEmpty == true;
-        final label =
-            hasDescription
-                ? detail.Description!.trim()
-                : 'Item ' + (i + 1).toString();
+        final label = hasDescription
+            ? detail.Description!.trim()
+            : 'Item ' + (i + 1).toString();
         final qty = detail.No_Of_Items ?? 0;
         final qtyLabel = qty > 0 ? 'x' + qty.toString() + ' ' : '';
         final amount = detail.Amount;
-        final line =
-            StringBuffer('- ')
-              ..write(qtyLabel)
-              ..write(label);
+        final line = StringBuffer('- ')
+          ..write(qtyLabel)
+          ..write(label);
         bytes.addAll(generator.text(_sanitizePrintable(line.toString())));
         if (amount != null && amount > 0) {
           bytes.addAll(
@@ -332,7 +390,7 @@ class BluetoothPrintService {
   Future<void> printPendingParcels({
     required List<Parcel> parcels,
     required PrinterDevice device,
-    String headerTitle = 'Pending Parcels Summary',
+    String headerTitle = _defaultReceiptHeader,
   }) async {
     if (parcels.isEmpty) {
       throw StateError('No pending parcels to print');
@@ -349,17 +407,60 @@ class BluetoothPrintService {
     final nowLabel = DateFormat('dd MMM yyyy HH:mm').format(DateTime.now());
 
     final bytes = <int>[];
-    bytes.addAll(
-      generator.text(
-        _sanitizePrintable(headerTitle),
-        styles: const PosStyles(
+    final pendingHeaderLines = headerTitle
+        .split('\n')
+        .map((l) => l.trim())
+        .where((l) => l.isNotEmpty)
+        .toList();
+    int? _pendingUnderlineIndex;
+    for (var i = 0; i < pendingHeaderLines.length; i++) {
+      var line = pendingHeaderLines[i];
+      final PosStyles styles;
+
+      if (line.toUpperCase() == 'NOTE') {
+        _pendingUnderlineIndex = i;
+        styles = const PosStyles(
+          align: PosAlign.center,
+          bold: true,
+          underline: true,
+          height: PosTextSize.size1,
+          width: PosTextSize.size1,
+        );
+      } else if (_pendingUnderlineIndex != null &&
+          i == _pendingUnderlineIndex + 1) {
+        // Simulate italic for the following line
+        line = '/$line/';
+        styles = const PosStyles(
+          align: PosAlign.center,
+          height: PosTextSize.size1,
+          width: PosTextSize.size1,
+        );
+        _pendingUnderlineIndex = null;
+      } else if (i == 1) {
+        styles = const PosStyles(
           align: PosAlign.center,
           bold: true,
           height: PosTextSize.size2,
           width: PosTextSize.size2,
+        );
+      } else if (i == 0) {
+        styles = const PosStyles(
+          align: PosAlign.center,
+          bold: true,
+          height: PosTextSize.size1,
+          width: PosTextSize.size1,
+        );
+      } else {
+        styles = const PosStyles(align: PosAlign.center);
+      }
+
+      bytes.addAll(
+        generator.text(
+          _sanitizePrintable(line),
+          styles: styles,
         ),
-      ),
-    );
+      );
+    }
     bytes.addAll(
       generator.text(
         _sanitizePrintable('Generated: ' + nowLabel),
@@ -400,6 +501,7 @@ class BluetoothPrintService {
       final senderLine = _formatContact(
         parcel.Sender_Name,
         parcel.Sender_Phone,
+        maskPhone: true,
       );
       if (senderLine != null) {
         bytes.addAll(
@@ -410,6 +512,7 @@ class BluetoothPrintService {
       final receiverLine = _formatContact(
         parcel.Receiver_Name,
         parcel.Receiver_Phone,
+        maskPhone: true,
       );
       if (receiverLine != null) {
         bytes.addAll(
@@ -417,10 +520,9 @@ class BluetoothPrintService {
         );
       }
 
-      final sentDate =
-          parcel.Date_sent != null
-              ? DateFormat('dd MMM yyyy').format(parcel.Date_sent!)
-              : 'N/A';
+      final sentDate = parcel.Date_sent != null
+          ? DateFormat('dd MMM yyyy').format(parcel.Date_sent!)
+          : 'N/A';
       bytes.addAll(generator.text(_sanitizePrintable('Date: ' + sentDate)));
       bytes.addAll(generator.hr(ch: '-'));
     }
@@ -484,10 +586,9 @@ class BluetoothPrintService {
 
   PrinterDevice _decodeDevice(Map<String, dynamic> data) {
     final printer = PrinterDevice(
-      name:
-          (data['name'] as String?)?.trim().isNotEmpty == true
-              ? data['name'] as String
-              : 'Saved printer',
+      name: (data['name'] as String?)?.trim().isNotEmpty == true
+          ? data['name'] as String
+          : 'Saved printer',
       address: data['address'] as String?,
       vendorId: data['vendorId'] as String?,
       productId: data['productId'] as String?,
@@ -527,9 +628,21 @@ class BluetoothPrintService {
     return buffer.toString();
   }
 
-  String? _formatContact(String? name, String? phone) {
+  String _maskPhone(String phone) {
+    final digits = phone.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.length <= 3) return digits;
+    final visible = digits.substring(digits.length - 3);
+    // mask the rest with x characters, preserve formatting minimally
+    return '***${visible}';
+  }
+
+  String? _formatContact(String? name, String? phone,
+      {bool maskPhone = false}) {
     final cleanName = name?.trim() ?? '';
-    final cleanPhone = phone?.trim() ?? '';
+    var cleanPhone = phone?.trim() ?? '';
+    if (maskPhone && cleanPhone.isNotEmpty) {
+      cleanPhone = _maskPhone(cleanPhone);
+    }
     if (cleanName.isEmpty && cleanPhone.isEmpty) {
       return null;
     }

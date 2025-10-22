@@ -4,7 +4,6 @@ import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 
-import '../inspection/models/bus_inspection.dart';
 import '../models/parcel_model.dart';
 import '../models/pricing_rate.dart';
 
@@ -303,61 +302,6 @@ class DatabaseHelper {
   //     return Parcel.fromDbMap(maps[i]);
   //   });
   // }
-  Future<int> insertInspection(BusInspection inspection) async {
-    final db = await database;
-    return db.insert(
-      _inspectionTable,
-      inspection.toDbMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
-  }
-
-  Future<int> updateInspection(BusInspection inspection) async {
-    if (inspection.id == null) {
-      throw ArgumentError('Cannot update an inspection without an id');
-    }
-    final db = await database;
-    return db.update(
-      _inspectionTable,
-      inspection.toDbMap(),
-      where: 'id = ?',
-      whereArgs: <Object?>[inspection.id],
-    );
-  }
-
-  Future<List<BusInspection>> getAllInspections() async {
-    final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      _inspectionTable,
-      orderBy: 'inspection_date DESC',
-    );
-    return maps.map(BusInspection.fromDbMap).toList();
-  }
-
-  Future<List<BusInspection>> getPendingInspections() async {
-    final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      _inspectionTable,
-      where: 'is_synced = ?',
-      whereArgs: const <Object?>[0],
-      orderBy: 'inspection_date DESC',
-    );
-    return maps.map(BusInspection.fromDbMap).toList();
-  }
-
-  Future<BusInspection?> getInspectionById(int id) async {
-    final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      _inspectionTable,
-      where: 'id = ?',
-      whereArgs: <Object?>[id],
-      limit: 1,
-    );
-    if (maps.isEmpty) {
-      return null;
-    }
-    return BusInspection.fromDbMap(maps.first);
-  }
 
   Future<int> markInspectionSynced(int id) async {
     final db = await database;

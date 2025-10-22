@@ -91,7 +91,7 @@ class ParcelCard extends StatelessWidget {
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: statusColor.withValues(alpha: 0.18),
+                      color: statusColor.withOpacity(0.18),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
@@ -180,7 +180,7 @@ class ParcelCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: theme.colorScheme.primary.withValues(alpha: 0.06),
+        color: theme.colorScheme.primary.withOpacity(0.06),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
@@ -224,7 +224,7 @@ class ParcelCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: theme.colorScheme.surface.withValues(alpha: 0.6),
+          color: theme.colorScheme.surface.withOpacity(0.6),
           borderRadius: BorderRadius.circular(14),
         ),
         child: Column(

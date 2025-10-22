@@ -9,6 +9,8 @@ import 'utils/app_colors.dart';
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   Get.put(LoggerService());
+  // Ensure a single app-scoped ParcelController is available
+  Get.put(ParcelController());
   runApp(const MyApp());
 }
 
@@ -16,7 +18,6 @@ class MyApp extends StatelessWidget {
   const MyApp({super.key});
   @override
   Widget build(BuildContext context) {
-    Get.put(ParcelController());
     return GetMaterialApp(
       title: 'Parcel Tracker',
       theme: _buildLightTheme(),
@@ -30,14 +31,9 @@ ThemeData _buildLightTheme() {
   final colorScheme = ColorScheme.fromSeed(
     seedColor: AppColors.primary,
     brightness: Brightness.light,
-  ).copyWith(
-    secondary: AppColors.accent,
-  );
+  ).copyWith(secondary: AppColors.accent);
 
-  final base = ThemeData(
-    useMaterial3: true,
-    colorScheme: colorScheme,
-  );
+  final base = ThemeData(useMaterial3: true, colorScheme: colorScheme);
 
   return base.copyWith(
     scaffoldBackgroundColor: AppColors.scaffold,
@@ -70,7 +66,7 @@ ThemeData _buildLightTheme() {
         borderRadius: BorderRadius.circular(14),
         borderSide: BorderSide(color: colorScheme.primary, width: 1.5),
       ),
-      hintStyle: TextStyle(color: AppColors.onSurface.withValues(alpha: 0.4)),
+      hintStyle: TextStyle(color: AppColors.onSurface.withOpacity(0.4)),
       prefixIconColor: colorScheme.primary,
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
@@ -79,21 +75,27 @@ ThemeData _buildLightTheme() {
         foregroundColor: Colors.white,
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        textStyle: base.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+        textStyle: base.textTheme.titleMedium?.copyWith(
+          fontWeight: FontWeight.w600,
+        ),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         foregroundColor: colorScheme.primary,
-        textStyle: base.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
+        textStyle: base.textTheme.labelLarge?.copyWith(
+          fontWeight: FontWeight.w600,
+        ),
       ),
     ),
     iconTheme: IconThemeData(color: colorScheme.primary),
     tabBarTheme: base.tabBarTheme.copyWith(
       indicatorColor: colorScheme.secondary,
       labelColor: AppColors.surface,
-      unselectedLabelColor: AppColors.surface.withValues(alpha: 0.7),
-      labelStyle: base.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+      unselectedLabelColor: AppColors.surface.withOpacity(0.7),
+      labelStyle: base.textTheme.labelLarge?.copyWith(
+        fontWeight: FontWeight.w700,
+      ),
       unselectedLabelStyle: base.textTheme.labelLarge,
     ),
     cardTheme: base.cardTheme.copyWith(
@@ -105,7 +107,9 @@ ThemeData _buildLightTheme() {
     chipTheme: base.chipTheme.copyWith(
       backgroundColor: AppColors.surface,
       selectedColor: colorScheme.primary,
-      labelStyle: base.textTheme.labelMedium?.copyWith(color: AppColors.onSurface),
+      labelStyle: base.textTheme.labelMedium?.copyWith(
+        color: AppColors.onSurface,
+      ),
       secondarySelectedColor: colorScheme.secondary,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -117,5 +121,3 @@ ThemeData _buildLightTheme() {
     ),
   );
 }
-
-

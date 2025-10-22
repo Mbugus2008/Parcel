@@ -1,11 +1,15 @@
+// import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_pos_printer_platform_image_3/flutter_pos_printer_platform_image_3.dart';
 import 'package:get/get.dart';
+// import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 
 import '../controllers/parcel_controller.dart';
 import '../models/parcel_model.dart';
 import '../utilities/status_color.dart';
+import '../widgets/payment_dialog.dart';
 import 'addeditparcel.dart';
 
 class ParcelDashboardPage extends StatefulWidget {
@@ -51,16 +55,13 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
 
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: const Color(0xFF233556),
-
+        backgroundColor: Colors.white,
         elevation: 0,
-
         titleSpacing: 16,
-
         leading: Builder(
           builder: (scaffoldContext) {
             return IconButton(
-              icon: const Icon(Icons.menu_rounded),
+              icon: const Icon(Icons.menu_rounded, color: Colors.black),
               tooltip: 'Menu',
               onPressed: () {
                 final scaffold = Scaffold.maybeOf(scaffoldContext);
@@ -77,121 +78,117 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
             );
           },
         ),
-
         title: AnimatedSwitcher(
           duration: const Duration(milliseconds: 250),
-
-          transitionBuilder:
-              (child, animation) => FadeTransition(
-                opacity: animation,
-
-                child: SizeTransition(
-                  sizeFactor: animation,
-
-                  axisAlignment: -1,
-
-                  child: child,
-                ),
-              ),
-
-          child:
-              _isSearching
-                  ? Row(
-                    // ensure search field fills the app bar area
-                    children: [
-                      Expanded(
-                        child: _buildSearchField(
-                          context,
-                          autofocus: true,
-                          onSubmitted:
-                              () => setState(() => _isSearching = false),
-                          fieldKey: const ValueKey('search-field'),
-                        ),
+          transitionBuilder: (child, animation) => FadeTransition(
+            opacity: animation,
+            child: SizeTransition(
+              sizeFactor: animation,
+              axisAlignment: -1,
+              child: child,
+            ),
+          ),
+          child: _isSearching
+              ? Row(
+                  // ensure search field fills the app bar area
+                  children: [
+                    Expanded(
+                      child: _buildSearchField(
+                        context,
+                        autofocus: true,
+                        onSubmitted: () => setState(() => _isSearching = false),
+                        fieldKey: const ValueKey('search-field'),
                       ),
-                    ],
-                  )
-                  : Row(
-                    key: const ValueKey('title'),
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text('Parcel Dashboard'),
-
-                      if (hasActiveFilters)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 8),
-
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-
-                              vertical: 4,
-                            ),
-
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.12),
-
-                              borderRadius: BorderRadius.circular(999),
-
-                              border: Border.all(
-                                color: Colors.white.withOpacity(0.24),
-                              ),
-                            ),
-
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-
-                              children: [
-                                const Icon(
-                                  Icons.tune_rounded,
-
-                                  size: 14,
-
-                                  color: Colors.white70,
-                                ),
-
-                                const SizedBox(width: 4),
-
-                                Text(
-                                  'Filtered',
-
-                                  style: theme.textTheme.labelSmall?.copyWith(
-                                    color: Colors.white70,
-
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                              ],
+                    ),
+                  ],
+                )
+              : Row(
+                  key: const ValueKey('title'),
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Column(
+                      children: [
+                        const Text(
+                          'Parcel Dashboard',
+                          style: TextStyle(color: Colors.black),
+                        ),
+                        const SizedBox(width: 8),
+                        Obx(() {
+                          final device = _controller.activePrinter;
+                          if (device == null) {
+                            return const Icon(
+                              Icons.print_disabled,
+                              color: Colors.redAccent,
+                              size: 20,
+                            );
+                          } else {
+                            return const Icon(
+                              Icons.print_rounded,
+                              color: Colors.green,
+                              size: 20,
+                            );
+                          }
+                        }),
+                      ],
+                    ),
+                    if (hasActiveFilters)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 8),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.24),
                             ),
                           ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.tune_rounded,
+                                size: 14,
+                                color: Colors.white70,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Filtered',
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: Colors.white70,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                    ],
-                  ),
+                      ),
+                  ],
+                ),
         ),
-
         actions: [
           if (_isSearching)
             IconButton(
               tooltip: 'Close search',
-
               onPressed: () {
                 setState(() => _isSearching = false);
 
                 FocusScope.of(context).unfocus();
               },
-
-              icon: const Icon(Icons.close_rounded, color: Colors.white70),
+              icon: const Icon(Icons.close_rounded, color: Colors.black),
             )
           else
             IconButton(
               tooltip: 'Search parcels',
-
               onPressed: () {
                 // populate the field with any existing query and show search
                 _searchController.text = _controller.searchQuery;
                 setState(() => _isSearching = true);
               },
-
-              icon: const Icon(Icons.search, color: Colors.white),
+              icon: const Icon(Icons.search, color: Colors.black),
             ),
 
           // hide the rest of the actions while searching
@@ -204,45 +201,27 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
 
               icon: Icon(
                 Icons.filter_list_rounded,
-
-                color: hasActiveFilters ? Colors.amberAccent : Colors.white,
+                color: hasActiveFilters ? Colors.amber : Colors.black,
               ),
             ),
-
             if (hasActiveFilters)
               IconButton(
                 tooltip: 'Clear filters',
-
                 onPressed: _onClearFilters,
-
-                icon: const Icon(
-                  Icons.clear_all_rounded,
-                  color: Colors.white70,
-                ),
+                icon: const Icon(Icons.clear_all_rounded, color: Colors.black),
               ),
-
             IconButton(
               onPressed: () => Get.to(() => const AddEditParcelPage()),
               icon: const Icon(Icons.add_rounded),
-              color: Colors.white,
+              color: Colors.black,
               tooltip: 'Add parcel',
             ),
           ],
         ],
       ),
       drawer: _buildDrawer(context),
-
       body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFF101728), Color(0xFF1F2A44)],
-
-            begin: Alignment.topLeft,
-
-            end: Alignment.bottomRight,
-          ),
-        ),
-
+        decoration: const BoxDecoration(color: Colors.white),
         child: SafeArea(
           child: Obx(() {
             if (_controller.isLoading) {
@@ -253,14 +232,12 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
               return const Center(
                 child: Text(
                   'No parcels available yet',
-
-                  style: TextStyle(color: Colors.white70),
+                  style: TextStyle(color: Colors.black87),
                 ),
               );
             }
 
-            final hasFilters =
-                _controller.searchQuery.isNotEmpty ||
+            final hasFilters = _controller.searchQuery.isNotEmpty ||
                 _controller.statusFilter != null;
 
             final visibleParcels =
@@ -272,15 +249,13 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
 
             final statuses = _controller.supportedStatuses;
 
-            final currentIndex =
-                statuses.isEmpty
-                    ? 0
-                    : _currentStep.clamp(0, statuses.length - 1);
+            final currentIndex = statuses.isEmpty
+                ? 0
+                : _currentStep.clamp(0, statuses.length - 1);
 
-            final currentParcels =
-                statuses.isEmpty
-                    ? const <Parcel>[]
-                    : groups[statuses[currentIndex]] ?? <Parcel>[];
+            final currentParcels = statuses.isEmpty
+                ? const <Parcel>[]
+                : groups[statuses[currentIndex]] ?? <Parcel>[];
 
             if (currentParcels.isEmpty &&
                 firstNonEmptyIndex != null &&
@@ -294,13 +269,10 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
 
             return ListView(
               padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
-
               children: [
                 if (hasFilters && visibleParcels.isEmpty)
                   _buildNoResultsBanner(context),
-
                 _buildStatusStepper(context, groups),
-
                 const SizedBox(height: 2),
               ],
             );
@@ -315,13 +287,10 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
 
     await showModalBottomSheet<void>(
       context: context,
-
       backgroundColor: const Color(0xFF1F2A44),
-
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-
       builder: (sheetContext) {
         final theme = Theme.of(sheetContext);
 
@@ -329,97 +298,70 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
 
         return Padding(
           padding: EdgeInsets.fromLTRB(20, 24, 20, 24 + bottomInset),
-
           child: Column(
             mainAxisSize: MainAxisSize.min,
-
             crossAxisAlignment: CrossAxisAlignment.start,
-
             children: [
               Row(
                 children: [
                   Text(
                     'Filter by status',
-
                     style: theme.textTheme.titleMedium?.copyWith(
                       color: Colors.white,
-
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-
                   const Spacer(),
-
                   IconButton(
                     tooltip: 'Close',
-
                     onPressed: () => Navigator.of(sheetContext).pop(),
-
                     icon: const Icon(
                       Icons.close_rounded,
-
                       color: Colors.white60,
                     ),
                   ),
                 ],
               ),
-
               const SizedBox(height: 12),
-
               _buildFilterOption(
                 sheetContext,
-
                 label: 'All statuses',
-
                 icon: const Icon(
                   Icons.filter_list_rounded,
-
                   color: Colors.white70,
                 ),
-
                 selected: _selectedStatus == null,
-
                 onTap: () {
                   Navigator.of(sheetContext).pop();
 
                   _onStatusFilterChanged(null);
                 },
               ),
-
               const Divider(color: Colors.white24, height: 24),
-
               for (final status in statuses)
                 _buildFilterOption(
                   sheetContext,
-
                   label: _controller.statusLabel(status),
-
                   icon: Icon(
                     _statusIcon(status),
-
                     color: getStatusColor(status),
                   ),
-
                   selected: _selectedStatus == status,
-
                   onTap: () {
                     Navigator.of(sheetContext).pop();
 
                     _onStatusFilterChanged(status);
                   },
                 ),
-
               if (_selectedStatus != null || _controller.searchQuery.isNotEmpty)
                 Align(
                   alignment: Alignment.centerRight,
-
                   child: TextButton(
                     onPressed: () {
                       Navigator.of(sheetContext).pop();
 
                       _onClearFilters();
                     },
-
                     child: const Text('Clear filters'),
                   ),
                 ),
@@ -480,10 +422,7 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
                   Text(
                     pendingCount == 0
                         ? 'There are no pending parcels to print right now.'
-                        : 'Select a printer to send ' +
-                            (pendingCount == 1
-                                ? '1 pending parcel.'
-                                : '$pendingCount pending parcels.'),
+                        : 'Select a printer to send ${pendingCount == 1 ? '1 pending parcel.' : '$pendingCount pending parcels.'}',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: Colors.white70,
                     ),
@@ -503,27 +442,25 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
                       ),
                       const Spacer(),
                       TextButton.icon(
-                        onPressed:
-                            isScanning
-                                ? null
-                                : () => _controller.refreshPrinters(),
-                        icon:
-                            isScanning
-                                ? SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: const CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.white70,
-                                    ),
+                        onPressed: isScanning
+                            ? null
+                            : () => _controller.refreshPrinters(),
+                        icon: isScanning
+                            ? SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: const CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.white70,
                                   ),
-                                )
-                                : const Icon(
-                                  Icons.refresh_rounded,
-                                  color: Colors.white70,
-                                  size: 18,
                                 ),
+                              )
+                            : const Icon(
+                                Icons.refresh_rounded,
+                                color: Colors.white70,
+                                size: 18,
+                              ),
                         label: Text(
                           isScanning ? 'Scanning...' : 'Rescan',
                           style: theme.textTheme.labelMedium?.copyWith(
@@ -544,7 +481,7 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(color: Colors.white12),
-                        color: Colors.black.withOpacity(0.12),
+                        color: Colors.black.withValues(alpha: 0.12),
                       ),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
@@ -593,30 +530,29 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton.icon(
-                      onPressed:
-                          isPrinting || active == null || pendingCount == 0
-                              ? null
-                              : () =>
-                                  _controller.printPendingParcelsViaBluetooth(),
-                      icon:
-                          isPrinting
-                              ? SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: const CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    Colors.white,
-                                  ),
+                      onPressed: isPrinting ||
+                              active == null ||
+                              pendingCount == 0
+                          ? null
+                          : () => _controller.printPendingParcelsViaBluetooth(),
+                      icon: isPrinting
+                          ? SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: const CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.white,
                                 ),
-                              )
-                              : const Icon(Icons.print_rounded),
+                              ),
+                            )
+                          : const Icon(Icons.print_rounded),
                       label: Text(
                         isPrinting
                             ? 'Printing...'
                             : pendingCount == 0
-                            ? 'No pending parcels'
-                            : 'Print pending parcels ($pendingCount)',
+                                ? 'No pending parcels'
+                                : 'Print pending parcels ($pendingCount)',
                       ),
                     ),
                   ),
@@ -626,10 +562,9 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
                       child: Align(
                         alignment: Alignment.centerRight,
                         child: TextButton(
-                          onPressed:
-                              isPrinting
-                                  ? null
-                                  : () => _controller.disconnectPrinter(),
+                          onPressed: isPrinting
+                              ? null
+                              : () => _controller.disconnectPrinter(),
                           child: const Text('Disconnect printer'),
                         ),
                       ),
@@ -647,19 +582,19 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
     required ThemeData theme,
     required PrinterDevice device,
   }) {
-    final displayName =
-        (device.name?.trim().isNotEmpty ?? false)
-            ? device.name!.trim()
-            : 'Connected printer';
+    final displayName = (device.name.trim().isNotEmpty)
+        ? device.name.trim()
+        : 'Connected printer';
     final address = device.address ?? 'Unknown address';
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.lightGreenAccent.withOpacity(0.4)),
-        color: Colors.lightGreenAccent.withOpacity(0.12),
+        border:
+            Border.all(color: Colors.lightGreenAccent.withValues(alpha: 0.4)),
+        color: Colors.lightGreenAccent.withValues(alpha: 0.12),
       ),
       child: Row(
         children: [
@@ -670,7 +605,7 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
           const SizedBox(width: 12),
           Expanded(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Text(
                   displayName,
@@ -680,10 +615,10 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 4),
+                Spacer(),
                 Text(
                   address,
-                  style: theme.textTheme.bodySmall?.copyWith(
+                  style: theme.textTheme.bodyMedium?.copyWith(
                     color: Colors.white70,
                   ),
                   overflow: TextOverflow.ellipsis,
@@ -702,21 +637,19 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
     required bool isActive,
     required VoidCallback onTap,
   }) {
-    final displayName =
-        (device.name?.trim().isNotEmpty ?? false)
-            ? device.name!.trim()
-            : 'Unnamed printer';
+    final displayName = (device.name.trim().isNotEmpty)
+        ? device.name.trim()
+        : 'Unnamed printer';
     final address = device.address ?? 'No address';
 
     return Card(
-      color: Colors.white.withOpacity(isActive ? 0.16 : 0.06),
+      color: Colors.white.withValues(alpha: isActive ? 0.16 : 0.06),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
         side: BorderSide(
-          color:
-              isActive
-                  ? Colors.lightGreenAccent.withOpacity(0.6)
-                  : Colors.white12,
+          color: isActive
+              ? Colors.lightGreenAccent.withValues(alpha: 0.6)
+              : Colors.white12,
         ),
       ),
       child: ListTile(
@@ -747,109 +680,72 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
 
   Widget _buildFilterOption(
     BuildContext context, {
-
     required String label,
-
     required Widget icon,
-
     required bool selected,
-
     required VoidCallback onTap,
   }) {
     final theme = Theme.of(context);
 
     return ListTile(
       contentPadding: EdgeInsets.zero,
-
       dense: true,
-
       leading: icon,
-
       title: Text(
         label,
-
         style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white),
       ),
-
-      trailing:
-          selected
-              ? const Icon(Icons.check_rounded, color: Colors.white70)
-              : null,
-
+      trailing: selected
+          ? const Icon(Icons.check_rounded, color: Colors.white70)
+          : null,
       onTap: onTap,
     );
   }
 
   Widget _buildSearchField(
     BuildContext context, {
-
     VoidCallback? onSubmitted,
-
     bool autofocus = false,
-
     Key? fieldKey,
   }) {
     final theme = Theme.of(context);
 
     return TextField(
       key: fieldKey,
-
       controller: _searchController,
-
       autofocus: autofocus,
-
       onChanged: _onSearchChanged,
-
       onSubmitted: (_) => onSubmitted?.call(),
-
       style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white),
-
       cursorColor: Colors.white70,
-
       decoration: InputDecoration(
         hintText: 'Search parcels...',
-
         hintStyle: theme.textTheme.bodyMedium?.copyWith(color: Colors.white54),
-
         prefixIcon: const Icon(Icons.search, color: Colors.white54),
-
-        suffixIcon:
-            _searchController.text.isEmpty
-                ? null
-                : IconButton(
-                  icon: const Icon(Icons.clear),
-
-                  color: Colors.white54,
-
-                  onPressed: _clearSearch,
-                ),
-
+        suffixIcon: _searchController.text.isEmpty
+            ? null
+            : IconButton(
+                icon: const Icon(Icons.clear),
+                color: Colors.white54,
+                onPressed: _clearSearch,
+              ),
         filled: true,
-
-        fillColor: Colors.white.withOpacity(0.08),
-
+        fillColor: Colors.white.withValues(alpha: 0.08),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 12,
-
           vertical: 12,
         ),
-
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-
-          borderSide: BorderSide(color: Colors.white.withOpacity(0.2)),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
         ),
-
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-
-          borderSide: BorderSide(color: Colors.white.withOpacity(0.18)),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.18)),
         ),
-
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-
-          borderSide: BorderSide(color: Colors.white.withOpacity(0.4)),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.4)),
         ),
       ),
     );
@@ -936,38 +832,27 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
-
       padding: const EdgeInsets.all(16),
-
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.08),
-
+        color: Colors.white.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(16),
-
-        border: Border.all(color: Colors.white.withOpacity(0.12)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
       ),
-
       child: Row(
         children: [
           const Icon(Icons.search_off_rounded, color: Colors.white70),
-
           const SizedBox(width: 12),
-
           Expanded(
             child: Text(
               'No parcels match your current filters.',
-
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: Colors.white70,
               ),
             ),
           ),
-
           TextButton(
             onPressed: _onClearFilters,
-
             style: TextButton.styleFrom(foregroundColor: Colors.white70),
-
             child: const Text('Clear filters'),
           ),
         ],
@@ -977,7 +862,6 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
 
   Widget _buildStatusStepper(
     BuildContext context,
-
     Map<ParcelStatus, List<Parcel>> groups,
   ) {
     final statuses = _controller.supportedStatuses;
@@ -989,50 +873,35 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
 
     return Container(
       width: double.infinity,
-
       padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
-
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(2),
-
         gradient: const LinearGradient(
-          colors: [Color(0xFF283349), Color(0xFF202736)],
-
+          colors: [Colors.white, Color(0xFFF0F0F0)],
           begin: Alignment.topLeft,
-
           end: Alignment.bottomRight,
         ),
-
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.25),
-
+            color: Colors.black.withValues(alpha: 0.25),
             blurRadius: 40,
-
             offset: const Offset(0, 20),
           ),
         ],
       ),
-
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-
         children: [
           Theme(
             data: theme.copyWith(
               canvasColor: Colors.transparent,
-
               colorScheme: theme.colorScheme.copyWith(
                 primary: Colors.white,
-
                 onPrimary: Colors.black,
-
                 onSurface: Colors.white70,
               ),
-
               dividerColor: Colors.white24,
             ),
-
             child: Builder(
               builder: (context) {
                 return Stepper(
@@ -1047,62 +916,39 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
 
                     return Container(
                       width: 32,
-
                       height: 32,
-
                       decoration: BoxDecoration(
-                        color: color.withOpacity(
-                          isActive || isComplete ? 0.28 : 0.14,
+                        color: color.withValues(
+                          alpha: isActive || isComplete ? 0.28 : 0.14,
                         ),
-
                         shape: BoxShape.circle,
-
                         border: Border.all(
-                          color: color.withOpacity(isActive ? 0.9 : 0.6),
-
+                          color: color.withValues(alpha: isActive ? 0.9 : 0.6),
                           width: 1.6,
                         ),
                       ),
-
                       alignment: Alignment.center,
-
                       child: Icon(_statusIcon(status), size: 18, color: color),
                     );
                   },
-
                   type: StepperType.vertical,
-
                   currentStep: currentStep,
-
                   physics: const NeverScrollableScrollPhysics(),
-
                   controlsBuilder: (context, _) => const SizedBox.shrink(),
-
                   onStepTapped: (index) => setState(() => _currentStep = index),
-
-                  onStepContinue:
-                      currentStep >= statuses.length - 1
-                          ? null
-                          : () =>
-                              setState(() => _currentStep = currentStep + 1),
-
-                  onStepCancel:
-                      currentStep <= 0
-                          ? null
-                          : () =>
-                              setState(() => _currentStep = currentStep - 1),
-
+                  onStepContinue: currentStep >= statuses.length - 1
+                      ? null
+                      : () => setState(() => _currentStep = currentStep + 1),
+                  onStepCancel: currentStep <= 0
+                      ? null
+                      : () => setState(() => _currentStep = currentStep - 1),
                   steps: [
                     for (var index = 0; index < statuses.length; index++)
                       _buildStatusStep(
                         context: context,
-
                         status: statuses[index],
-
                         parcels: groups[statuses[index]] ?? <Parcel>[],
-
                         index: index,
-
                         currentStep: currentStep,
                       ),
                   ],
@@ -1117,13 +963,9 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
 
   Step _buildStatusStep({
     required BuildContext context,
-
     required ParcelStatus status,
-
     required List<Parcel> parcels,
-
     required int index,
-
     required int currentStep,
   }) {
     final theme = Theme.of(context);
@@ -1159,49 +1001,34 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
         children: [
           Container(
             padding: const EdgeInsets.all(1),
-
             decoration: BoxDecoration(
-              color: statusColor.withOpacity(0.2),
-
+              color: statusColor.withValues(alpha: 0.2),
               shape: BoxShape.circle,
             ),
-
             child: Icon(_statusIcon(status), size: 18, color: statusColor),
           ),
-
           const SizedBox(width: 12),
-
           Expanded(
             child: Text(
               _controller.statusLabel(status),
-
               style: theme.textTheme.titleMedium?.copyWith(
-                color: Colors.white,
-
+                color: Colors.black,
                 fontWeight: FontWeight.w700,
-
-                fontSize: 24,
+                fontSize: 20,
               ),
             ),
           ),
-
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-
             decoration: BoxDecoration(
-              color: statusColor.withOpacity(0.22),
-
+              color: statusColor.withValues(alpha: 0.22),
               borderRadius: BorderRadius.circular(999),
             ),
-
             child: Text(
               hasParcels ? '${parcels.length} ' : '0',
-
               style: theme.textTheme.labelMedium?.copyWith(
-                color: Colors.white,
-
+                color: Colors.black,
                 fontWeight: FontWeight.w600,
-
                 fontSize: 20,
               ),
             ),
@@ -1228,11 +1055,8 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
 
   Widget _buildStepContent(
     BuildContext context,
-
     List<Parcel> parcels,
-
     ParcelStatus status,
-
     Color statusColor,
   ) {
     final theme = Theme.of(context);
@@ -1240,36 +1064,29 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
     if (parcels.isEmpty) {
       return Align(
         alignment: Alignment.centerLeft,
-
         child: Text(
           'No parcels here.',
-
-          style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white60),
+          style: theme.textTheme.bodyMedium?.copyWith(color: Colors.black87),
         ),
       );
     }
 
-    final parcelRows =
-        parcels
-            .map(
-              (parcel) => _buildStepParcelRow(
-                context: context,
-
-                parcel: parcel,
-
-                statusColor: statusColor,
-              ),
-            )
-            .toList();
+    final parcelRows = parcels
+        .map(
+          (parcel) => _buildStepParcelRow(
+            context: context,
+            parcel: parcel,
+            statusColor: statusColor,
+          ),
+        )
+        .toList();
     return ConstrainedBox(
       constraints: BoxConstraints(
-        maxHeight:
-            (MediaQuery.of(context).size.height -
+        maxHeight: (MediaQuery.of(context).size.height -
                 kToolbarHeight -
                 MediaQuery.of(context).padding.top) *
             0.5,
       ),
-
       child: Scrollbar(
         child: ListView(
           padding: EdgeInsets.zero,
@@ -1283,40 +1100,43 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
 
   Widget _buildInfoPill({
     required ThemeData theme,
-
     required IconData icon,
-
     required String label,
-
     required Color accentColor,
   }) {
     final textStyle = theme.textTheme.bodySmall?.copyWith(
-      color: Colors.white70,
-
+      color: Colors.black,
       letterSpacing: 0.2,
     );
 
     final cleanedLabel = label.trim();
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-
+      margin: const EdgeInsets.all(2),
       decoration: BoxDecoration(
-        color: accentColor.withOpacity(0.16),
-
-        borderRadius: BorderRadius.circular(12),
-
-        border: Border.all(color: accentColor.withOpacity(0.4)),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(4),
+        // 💙 blueish border
+        border: Border.all(
+          color: Colors.blueAccent.withOpacity(0.6),
+          width: 1.5,
+        ),
+        // soft shadow for “floating” effect
+        boxShadow: [
+          BoxShadow(
+            color: Colors.blueAccent.withValues(alpha: 0.15),
+            blurRadius: 12,
+            spreadRadius: 2,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
-
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       child: Row(
         mainAxisSize: MainAxisSize.min,
-
         children: [
-          Icon(icon, size: 16, color: accentColor.withOpacity(0.9)),
-
+          Icon(icon, size: 16, color: accentColor.withValues(alpha: 0.9)),
           const SizedBox(width: 6),
-
           Text(cleanedLabel, style: textStyle),
         ],
       ),
@@ -1325,13 +1145,9 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
 
   Widget _buildContactChip({
     required ThemeData theme,
-
     required String? label,
-
     required String? detail,
-
     required IconData icon,
-
     required Color chipColor,
   }) {
     final nameText = label?.trim();
@@ -1339,55 +1155,56 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
     final detailText = detail?.trim();
 
     final primaryStyle = theme.textTheme.bodySmall?.copyWith(
-      color: Colors.white,
-
+      color: Colors.black,
       letterSpacing: 0.2,
     );
 
-    final secondaryStyle = primaryStyle?.copyWith(color: Colors.white70);
+    final secondaryStyle =
+        primaryStyle?.copyWith(color: Colors.black54, fontSize: 16);
 
-    final borderColor = chipColor.withOpacity(0.38);
-
-    return Chip(
-      avatar: Icon(icon, color: chipColor.withOpacity(0.85), size: 16),
-
-      backgroundColor: chipColor.withOpacity(0.14),
-
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-
-        side: BorderSide(color: borderColor),
+    return Container(
+      margin: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(4),
+        // 💙 blueish border
+        border: Border.all(
+          color: Colors.blueAccent.withOpacity(0.6),
+          width: 1.5,
+        ),
+        // soft shadow for “floating” effect
+        boxShadow: [
+          BoxShadow(
+            color: Colors.blueAccent.withOpacity(0.15),
+            blurRadius: 12,
+            spreadRadius: 2,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
-
-      label: Row(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      child: Row(
         mainAxisSize: MainAxisSize.min,
-
         children: [
+          Icon(icon, color: chipColor.withValues(alpha: 0.85), size: 16),
+          const SizedBox(width: 8),
           if (nameText != null && nameText.isNotEmpty)
             Text(nameText, style: primaryStyle),
-
           if (nameText != null &&
               nameText.isNotEmpty &&
               detailText != null &&
               detailText.isNotEmpty)
-            const SizedBox(width: 8),
-
+            Spacer(),
           if (detailText != null && detailText.isNotEmpty)
             Text(detailText, style: secondaryStyle),
         ],
       ),
-
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-
-      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
     );
   }
 
   Widget _buildStepParcelRow({
     required BuildContext context,
-
     required Parcel parcel,
-
     required Color statusColor,
   }) {
     final theme = Theme.of(context);
@@ -1403,10 +1220,9 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
         break;
     }
     ;
-    final sentDate =
-        parcel.Date_sent != null
-            ? DateFormat('dd MMM').format(parcel.Date_sent!)
-            : 'No date';
+    final sentDate = parcel.Date_sent != null
+        ? DateFormat('dd MMM').format(parcel.Date_sent!)
+        : 'No date';
 
     final vehicle = parcel.Vehicle?.trim();
 
@@ -1429,13 +1245,9 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
       contactChips.add(
         _buildContactChip(
           theme: theme,
-
           label: senderName,
-
           detail: senderPhone,
-
           icon: Icons.send_rounded,
-
           chipColor: statusColor,
         ),
       );
@@ -1446,13 +1258,9 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
       contactChips.add(
         _buildContactChip(
           theme: theme,
-
           label: receiverName,
-
           detail: receiverPhone,
-
           icon: Icons.inbox_rounded,
-
           chipColor: statusColor,
         ),
       );
@@ -1464,11 +1272,8 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
       infoPills.add(
         _buildInfoPill(
           theme: theme,
-
           icon: Icons.local_shipping_rounded,
-
           label: vehicle,
-
           accentColor: statusColor,
         ),
       );
@@ -1478,11 +1283,8 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
       infoPills.add(
         _buildInfoPill(
           theme: theme,
-
           icon: Icons.badge_rounded,
-
           label: driver,
-
           accentColor: statusColor,
         ),
       );
@@ -1492,135 +1294,89 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
       infoPills.add(
         _buildInfoPill(
           theme: theme,
-
           icon: Icons.scale_rounded,
-
           label: weight,
-
           accentColor: statusColor,
         ),
       );
     }
 
-    final cardRadius = BorderRadius.circular(16);
-
-    final accentIcon =
-        (vehicle != null && vehicle.isNotEmpty)
-            ? Icons.local_shipping_rounded
-            : Icons.inventory_2_rounded;
+    final cardRadius = BorderRadius.circular(5);
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-
+      margin: const EdgeInsets.only(bottom: 5),
       child: Material(
         color: Colors.transparent,
-
         child: InkWell(
           borderRadius: cardRadius,
-
           onTap: () => Get.to(() => AddEditParcelPage(parcel: parcel)),
-
           child: Ink(
             decoration: BoxDecoration(
-              borderRadius: cardRadius,
-
-              gradient: LinearGradient(
-                colors: [
-                  statusColor.withOpacity(0.32),
-
-                  const Color(0xFF111D33),
-                ],
-
-                begin: Alignment.topLeft,
-
-                end: Alignment.bottomRight,
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(5),
+              // 💙 blueish border
+              border: Border.all(
+                color: Colors.blueAccent.withValues(alpha: 0.6),
+                width: 1.5,
               ),
-
-              border: Border.all(color: statusColor.withOpacity(0.45)),
-
+              // soft shadow for “floating” effect
               boxShadow: [
                 BoxShadow(
-                  color: statusColor.withOpacity(0.18),
-
-                  blurRadius: 18,
-
-                  offset: const Offset(0, 10),
+                  color: Colors.blueAccent.withValues(alpha: 0.15),
+                  blurRadius: 12,
+                  spreadRadius: 2,
+                  offset: const Offset(0, 6),
                 ),
               ],
             ),
-
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(1, 1, 1, 1),
-
+              padding: const EdgeInsets.all(8),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-
                 children: [
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
-
                     children: [
                       Text(
                         parcel.Document_No ?? 'Unknown reference',
-
                         style: theme.textTheme.titleMedium?.copyWith(
-                          color: Colors.white,
-
+                          color: Colors.black,
                           fontWeight: FontWeight.w700,
-
                           letterSpacing: 0.2,
                         ),
                       ),
-
                       const Spacer(),
-
                       Icon(
                         Icons.alt_route_rounded,
-
                         size: 16,
-
                         color: Colors.white70,
                       ),
-
                       const SizedBox(width: 6),
-
                       Expanded(
                         child: Text(
-                          route ?? '',
-
+                          route,
                           style: theme.textTheme.bodySmall?.copyWith(
-                            color: Colors.white70,
+                            color: Colors.black87,
                           ),
-
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-
-                      const Spacer(),
-
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
-
                         children: [
                           Row(
                             mainAxisSize: MainAxisSize.min,
-
                             children: [
                               Icon(
                                 Icons.calendar_today_rounded,
-
                                 size: 14,
-
-                                color: Colors.white60,
+                                color: Colors.black54,
                               ),
-
                               const SizedBox(width: 6),
-
                               Text(
                                 sentDate,
-
                                 style: theme.textTheme.bodySmall?.copyWith(
-                                  color: Colors.white70,
+                                  color: Colors.black87,
                                 ),
                               ),
                             ],
@@ -1629,32 +1385,22 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
                       ),
                     ],
                   ),
-
-                  if (infoPills.isNotEmpty) ...[
-                    const SizedBox(height: 14),
-
-                    Wrap(spacing: 8, runSpacing: 8, children: infoPills),
-                  ],
-
                   if (contactChips.isNotEmpty) ...[
-                    const SizedBox(height: 14),
-
+                    const SizedBox(height: 2),
                     Divider(
                       height: 1,
-
                       thickness: 1,
-
-                      color: Colors.white.withOpacity(0.08),
+                      color: Colors.black.withValues(alpha: 0.12),
                     ),
-
-                    const SizedBox(height: 14),
-
-                    Wrap(spacing: 8, runSpacing: 8, children: contactChips),
+                    const SizedBox(height: 8),
+                    Wrap(spacing: 2, runSpacing: 2, children: contactChips),
                   ],
-
+                  if (infoPills.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Wrap(spacing: 2, runSpacing: 2, children: infoPills),
+                  ],
                   if (parcel.Status == ParcelStatus.pending) ...[
-                    const SizedBox(height: 14),
-
+                    const SizedBox(height: 2),
                     Align(
                       alignment: Alignment.centerRight,
                       child: ElevatedButton(
@@ -1663,19 +1409,27 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
                       ),
                     ),
                   ],
-
                   if (parcel.Status == ParcelStatus.inTransit) ...[
-                    const SizedBox(height: 14),
-
+                    const SizedBox(height: 8),
                     Align(
                       alignment: Alignment.centerRight,
                       child: ElevatedButton(
-                        onPressed:
-                            () => _controller.updateParcelStatus(
-                              parcel,
-                              ParcelStatus.received,
-                            ),
+                        onPressed: () => _controller.updateParcelStatus(
+                          parcel,
+                          ParcelStatus.received,
+                        ),
                         child: const Text('Receive'),
+                      ),
+                    ),
+                  ],
+                  if (parcel.Status == ParcelStatus.pending ||
+                      parcel.Status == ParcelStatus.received) ...[
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: ElevatedButton(
+                        onPressed: () => showPaymentDialog(context, parcel),
+                        child: const Text('Pay'),
                       ),
                     ),
                   ],
@@ -1695,54 +1449,146 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
     await showDialog<void>(
       context: context,
       builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Prepare Dispatch'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: driverController,
-                decoration: const InputDecoration(
-                  labelText: 'Driver name',
-                  hintText: 'Enter driver responsible',
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Material(
+            elevation: 8,
+            borderRadius: BorderRadius.circular(16),
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF1E3A8A), Color(0xFF3B82F6)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
-                textCapitalization: TextCapitalization.words,
+                borderRadius: BorderRadius.circular(16),
               ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: vehicleController,
-                decoration: const InputDecoration(
-                  labelText: 'Vehicle',
-                  hintText: 'Enter vehicle registration',
-                ),
-                textCapitalization: TextCapitalization.characters,
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Prepare Dispatch',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: vehicleController,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(
+                      labelText: 'Vehicle',
+                      hintText: 'Enter vehicle registration',
+                      labelStyle: TextStyle(color: Colors.white),
+                      floatingLabelStyle: TextStyle(color: Colors.white),
+                      hintStyle: TextStyle(color: Colors.white70),
+                      filled: true,
+                      fillColor: Color(0x14FFFFFF),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.all(Radius.circular(12)),
+                        borderSide: BorderSide(color: Color(0x33FFFFFF)),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.all(Radius.circular(12)),
+                        borderSide: BorderSide(color: Color(0x2EFFFFFF)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.all(Radius.circular(12)),
+                        borderSide: BorderSide(color: Color(0x66FFFFFF)),
+                      ),
+                    ),
+                    textCapitalization: TextCapitalization.characters,
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: driverController,
+                          style: const TextStyle(color: Colors.white),
+                          decoration: const InputDecoration(
+                            labelText: 'Driver name',
+                            hintText: 'Enter driver responsible',
+                            labelStyle: TextStyle(color: Colors.white),
+                            floatingLabelStyle: TextStyle(color: Colors.white),
+                            hintStyle: TextStyle(color: Colors.white70),
+                            filled: true,
+                            fillColor: Color(0x14FFFFFF),
+                            border: OutlineInputBorder(
+                              borderRadius:
+                                  BorderRadius.all(Radius.circular(12)),
+                              borderSide: BorderSide(color: Color(0x33FFFFFF)),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius:
+                                  BorderRadius.all(Radius.circular(12)),
+                              borderSide: BorderSide(color: Color(0x2EFFFFFF)),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius:
+                                  BorderRadius.all(Radius.circular(12)),
+                              borderSide: BorderSide(color: Color(0x66FFFFFF)),
+                            ),
+                          ),
+                          textCapitalization: TextCapitalization.words,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      ElevatedButton(
+                        onPressed: () {
+                          final driver = driverController.text.trim();
+                          final vehicle = vehicleController.text.trim();
+                          if (driver.isEmpty || vehicle.isEmpty) {
+                            Get.snackbar(
+                              'Validation Error',
+                              'Please enter both driver name and vehicle.',
+                              snackPosition: SnackPosition.BOTTOM,
+                              backgroundColor: Colors.redAccent.withValues(
+                                alpha: 0.9,
+                              ),
+                              colorText: Colors.white,
+                            );
+                            return;
+                          }
+                          Navigator.of(dialogContext).pop();
+                          _controller.dispatchParcelWithDetails(
+                            parcel,
+                            driver: driver,
+                            vehicle: vehicle,
+                          );
+                        },
+                        child: const Text('Dispatch'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(),
+                      child: const Text(
+                        'Cancel',
+                        style: TextStyle(color: Colors.white70),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                final driver = driverController.text.trim();
-                final vehicle = vehicleController.text.trim();
-                Navigator.of(dialogContext).pop();
-                _controller.dispatchParcelWithDetails(
-                  parcel,
-                  driver: driver,
-                  vehicle: vehicle,
-                );
-              },
-              child: const Text('Dispatch'),
-            ),
-          ],
         );
       },
     );
-  }
 
+    // Dispose local controllers created for the dialog
+    try {
+      driverController.dispose();
+      vehicleController.dispose();
+    } catch (_) {}
+  }
 
   Drawer _buildDrawer(BuildContext context) {
     final theme = Theme.of(context);
@@ -1766,9 +1612,7 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-
                   const SizedBox(height: 4),
-
                   Text(
                     "Manage shipments at a glance",
                     style: theme.textTheme.bodyMedium?.copyWith(
@@ -1778,14 +1622,12 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
                 ],
               ),
             ),
-
             ListTile(
               leading: const Icon(Icons.dashboard_rounded),
               title: const Text("Dashboard"),
               selected: true,
               onTap: () => Navigator.of(context).pop(),
             ),
-
             ListTile(
               leading: const Icon(Icons.add_box_rounded),
               title: const Text("Log New Parcel"),
@@ -1794,7 +1636,6 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
                 Get.to(() => const AddEditParcelPage());
               },
             ),
-
             ListTile(
               leading: const Icon(Icons.filter_list_rounded),
               title: const Text("Filter parcels"),
@@ -1803,7 +1644,6 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
                 Future.microtask(_openFilterSheet);
               },
             ),
-
             Obx(() {
               final device = _controller.activePrinter;
               final subtitleText = () {
@@ -1827,9 +1667,7 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
                 },
               );
             }),
-
             const Divider(),
-
             ListTile(
               leading: const Icon(Icons.help_outline_rounded),
               title: const Text("Support"),
@@ -1856,47 +1694,5 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
       case ParcelStatus.collected:
         return Icons.verified_rounded;
     }
-  }
-
-  String _statusDescription(ParcelStatus status) {
-    switch (status) {
-      case ParcelStatus.pending:
-        return 'Newly logged parcels awaiting pickup or dispatch confirmation.';
-
-      case ParcelStatus.inTransit:
-        return 'Shipments moving between hubs or currently out with couriers.';
-
-      case ParcelStatus.received:
-        return 'Arrived at the destination hub and ready for customer collection.';
-
-      case ParcelStatus.collected:
-        return 'Parcels handed over to recipients and ready to close out the journey.';
-    }
-  }
-
-  String? _formatRoute(Parcel parcel) {
-    final parts = <String>[];
-
-    final from = parcel.From?.trim();
-
-    if (from != null && from.isNotEmpty) {
-      parts.add(from);
-    }
-
-    final to = parcel.To?.trim();
-
-    if (to != null && to.isNotEmpty) {
-      parts.add(to);
-    }
-
-    if (parts.isEmpty) {
-      return null;
-    }
-
-    if (parts.length == 1) {
-      return parts.first;
-    }
-
-    return '${parts.first} -> ${parts.last}';
   }
 }

@@ -2,10 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter_pos_printer_platform_image_3/flutter_pos_printer_platform_image_3.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_pos_printer_platform_image_3/flutter_pos_printer_platform_image_3.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 
@@ -48,13 +48,12 @@ class ParcelController extends GetxController {
   Parcel? parcel;
 
   List<Parcel> get parcels => _parcels;
-  List<Parcel> get pendingParcels =>
-      _parcels
-          .where(
-            (parcel) =>
-                (parcel.Status ?? ParcelStatus.pending) == ParcelStatus.pending,
-          )
-          .toList();
+  List<Parcel> get pendingParcels => _parcels
+      .where(
+        (parcel) =>
+            (parcel.Status ?? ParcelStatus.pending) == ParcelStatus.pending,
+      )
+      .toList();
   List<Parcel> get filteredParcels => _filteredParcels;
   bool get isLoading => _isLoading.value;
   String get searchQuery => _searchQuery.value;
@@ -120,7 +119,10 @@ class ParcelController extends GetxController {
   ParcelStatus selectedStatus = ParcelStatus.pending;
   WhoToPay paymentResponsibility = WhoToPay.Sender;
   DateTime selectedDate = DateTime.now();
-  bool paid = false;
+  // Make 'paid' reactive so UI can listen with minimal rebuilds
+  final RxBool paidRx = false.obs;
+  bool get paid => paidRx.value;
+  set paid(bool v) => paidRx.value = v;
 
   RxString parcelinformationError = ''.obs;
   RxString senderinformationError = ''.obs;
@@ -286,10 +288,9 @@ class ParcelController extends GetxController {
       }
       _activePrinter.value = device;
       await _bluetoothService.savePreferredPrinter(device);
-      final displayName =
-          device.name.trim().isNotEmpty
-              ? device.name.trim()
-              : (device.address ?? 'Bluetooth printer connected.');
+      final displayName = device.name.trim().isNotEmpty
+          ? device.name.trim()
+          : (device.address ?? 'Bluetooth printer connected.');
       Get.snackbar(
         'Printer ready',
         displayName,
@@ -320,54 +321,50 @@ class ParcelController extends GetxController {
     }
   }
 
+  Future<void> dispatchParcelWithDetails(
+    Parcel parcel, {
+    String? driver,
+    String? vehicle,
+  }) async {
+    final trimmedDriver = driver?.trim();
+    final trimmedVehicle = vehicle?.trim();
 
+    var working = parcel;
+    final hasDriverChange =
+        (trimmedDriver ?? '') != (parcel.Driver?.trim() ?? '');
+    final hasVehicleChange =
+        (trimmedVehicle ?? '') != (parcel.Vehicle?.trim() ?? '');
 
-
-Future<void> dispatchParcelWithDetails(
-  Parcel parcel, {
-  String? driver,
-  String? vehicle,
-}) async {
-  final trimmedDriver = driver?.trim();
-  final trimmedVehicle = vehicle?.trim();
-
-  var working = parcel;
-  final hasDriverChange =
-      (trimmedDriver ?? '') != (parcel.Driver?.trim() ?? '');
-  final hasVehicleChange =
-      (trimmedVehicle ?? '') != (parcel.Vehicle?.trim() ?? '');
-
-  if (hasDriverChange || hasVehicleChange) {
-    working = parcel.copyWith(
-      Driver: trimmedDriver?.isNotEmpty == true ? trimmedDriver : null,
-      Vehicle: trimmedVehicle?.isNotEmpty == true ? trimmedVehicle : null,
-    );
-    try {
-      await _dbHelper.updateParcel(working);
-      final index = _parcels.indexWhere(
-        (p) => p.Document_No == working.Document_No,
+    if (hasDriverChange || hasVehicleChange) {
+      working = parcel.copyWith(
+        Driver: trimmedDriver?.isNotEmpty == true ? trimmedDriver : null,
+        Vehicle: trimmedVehicle?.isNotEmpty == true ? trimmedVehicle : null,
       );
-      if (index != -1) {
-        _parcels[index] = working;
-        _parcels.refresh();
+      try {
+        await _dbHelper.updateParcel(working);
+        final index = _parcels.indexWhere(
+          (p) => p.Document_No == working.Document_No,
+        );
+        if (index != -1) {
+          _parcels[index] = working;
+          _parcels.refresh();
+        }
+        _filterParcels();
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('Failed to update parcel transport info: ' + e.toString());
+        }
+        Get.snackbar(
+          'Error',
+          'Unable to save driver or vehicle details. Please try again.',
+          snackPosition: SnackPosition.BOTTOM,
+        );
+        return;
       }
-      _filterParcels();
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('Failed to update parcel transport info: ' + e.toString());
-      }
-      Get.snackbar(
-        'Error',
-        'Unable to save driver or vehicle details. Please try again.',
-        snackPosition: SnackPosition.BOTTOM,
-      );
-      return;
     }
+
+    await dispatchParcel(working);
   }
-
-  await dispatchParcel(working);
-}
-
 
   Future<void> dispatchParcel(Parcel parcel) async {
     final currentStatus = parcel.Status ?? ParcelStatus.pending;
@@ -379,10 +376,11 @@ Future<void> dispatchParcelWithDetails(
     final device = _activePrinter.value;
     if (device == null) {
       Get.snackbar(
-        'No printer selected',
-        'Choose a Bluetooth printer before printing.',
+        'Printer unavailable',
+        'Dispatch recorded without printing.',
         snackPosition: SnackPosition.BOTTOM,
       );
+      await updateParcelStatus(parcel, ParcelStatus.inTransit);
       return;
     }
 
@@ -417,6 +415,7 @@ Future<void> dispatchParcelWithDetails(
     }
 
     if (!printed) {
+      await updateParcelStatus(parcel, ParcelStatus.inTransit);
       return;
     }
 
@@ -531,14 +530,12 @@ Future<void> dispatchParcelWithDetails(
 
     final updated = parcel.copyWith(
       Status: newStatus,
-      Date_Delivered:
-          newStatus == ParcelStatus.received
-              ? DateTime.now()
-              : parcel.Date_Delivered,
-      Date_Collected:
-          newStatus == ParcelStatus.collected
-              ? DateTime.now()
-              : parcel.Date_Collected,
+      Date_Delivered: newStatus == ParcelStatus.received
+          ? DateTime.now()
+          : parcel.Date_Delivered,
+      Date_Collected: newStatus == ParcelStatus.collected
+          ? DateTime.now()
+          : parcel.Date_Collected,
     );
 
     try {
@@ -663,7 +660,25 @@ Future<void> dispatchParcelWithDetails(
 
   @override
   void onClose() {
+    // Cancel any active subscriptions
     _printerScanSub?.cancel();
+
+    // Dispose long-lived TextEditingControllers to free native resources
+    try {
+      documentNoController.dispose();
+      senderNameController.dispose();
+      senderIdController.dispose();
+      senderPhoneController.dispose();
+      fromController.dispose();
+      toController.dispose();
+      receiverNameController.dispose();
+      receiverIdController.dispose();
+      receiverPhoneController.dispose();
+      driverController.dispose();
+      vehicleController.dispose();
+      amountPaidController.dispose();
+    } catch (_) {}
+
     super.onClose();
   }
 
@@ -680,9 +695,8 @@ Future<void> dispatchParcelWithDetails(
       } else {
         deviceId = 'UNKNOWNDEVICE';
       }
-      final sanitized = deviceId
-          .replaceAll(RegExp('[^A-Za-z0-9]'), '')
-          .padRight(6, 'X');
+      final sanitized =
+          deviceId.replaceAll(RegExp('[^A-Za-z0-9]'), '').padRight(6, 'X');
       final normalized = sanitized.substring(0, 6).toUpperCase();
       final timestamp = DateTime.now().millisecondsSinceEpoch.toString();
       final suffix = timestamp.substring(timestamp.length - 6);
