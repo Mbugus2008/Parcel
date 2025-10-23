@@ -6,6 +6,7 @@ import 'package:trimline_parcel/pages/parcel_dashboard_page.dart';
 import 'package:trimline_parcel/widgets/parcel_card.dart';
 import '../models/parcel_model.dart';
 import '../controllers/parcel_controller.dart';
+import '../utilities/time_formatter.dart';
 
 
 class ParcelListPage extends StatefulWidget {
@@ -104,6 +105,25 @@ class _ParcelListPageState extends State<ParcelListPage> {
             ),
           ),
         ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(24),
+          child: Obx(() {
+            final lastUpdated = _parcelController.lastUpdated;
+            return Container(
+              alignment: Alignment.centerRight,
+              padding: const EdgeInsets.only(right: 16, bottom: 4),
+              child: Text(
+                lastUpdated != null
+                    ? 'Last updated: ${formatTimeAgo(lastUpdated)}'
+                    : 'Not yet loaded',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Colors.white70,
+                ),
+              ),
+            );
+          }),
+        ),
       ),
       body: Column(
         children: [
