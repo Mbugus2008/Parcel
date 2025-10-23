@@ -22,6 +22,7 @@ class ParcelController extends GetxController {
   final RxBool _isLoading = true.obs;
   final RxString _searchQuery = ''.obs;
   final Rx<ParcelStatus?> _statusFilter = Rx<ParcelStatus?>(null);
+  final Rx<DateTime?> _lastUpdated = Rx<DateTime?>(null);
 
   static const List<ParcelStatus> _statusOrder = <ParcelStatus>[
     ParcelStatus.pending,
@@ -37,6 +38,7 @@ class ParcelController extends GetxController {
   bool get isLoading => _isLoading.value;
   String get searchQuery => _searchQuery.value;
   ParcelStatus? get statusFilter => _statusFilter.value;
+  DateTime? get lastUpdated => _lastUpdated.value;
   List<ParcelStatus> get supportedStatuses => _statusOrder;
 
   Map<ParcelStatus, List<Parcel>> get parcelsByStatus {
@@ -101,6 +103,7 @@ class ParcelController extends GetxController {
       final items = await _dbHelper.getAllParcels();
       _parcels.assignAll(items);
       _filterParcels();
+      _lastUpdated.value = DateTime.now();
     } catch (e) {
       if (kDebugMode) {
         debugPrint('Error loading parcels: ');
