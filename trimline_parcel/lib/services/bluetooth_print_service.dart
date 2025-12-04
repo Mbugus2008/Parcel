@@ -174,14 +174,14 @@ GOODS CARRIED AT OWNER’S RISK
         .map((l) => l.trim())
         .where((l) => l.isNotEmpty)
         .toList();
-    int? _underlineIndex;
+    int? underlineIndex;
     for (var i = 0; i < headerLines.length; i++) {
       var line = headerLines[i];
       final PosStyles styles;
 
       // Detect the NOTE line (case-insensitive) and mark it for underlining.
       if (line.toUpperCase() == 'NOTE') {
-        _underlineIndex = i;
+        underlineIndex = i;
         styles = const PosStyles(
           align: PosAlign.center,
           bold: true,
@@ -197,7 +197,7 @@ GOODS CARRIED AT OWNER’S RISK
           height: PosTextSize.size1,
           width: PosTextSize.size1,
         );
-      } else if (_underlineIndex != null && i == _underlineIndex + 1) {
+      } else if (underlineIndex != null && i == underlineIndex + 1) {
         // The line immediately after NOTE: printers typically don't support
         // italic. We'll simulate an italic appearance by surrounding the text
         // with slashes and printing it slightly smaller.
@@ -208,7 +208,7 @@ GOODS CARRIED AT OWNER’S RISK
           width: PosTextSize.size1,
         );
         // Clear underline index so only the next line is affected.
-        _underlineIndex = null;
+        underlineIndex = null;
       } else if (i == 0) {
         // First line (smaller)
         styles = const PosStyles(
@@ -231,7 +231,7 @@ GOODS CARRIED AT OWNER’S RISK
     }
     bytes.addAll(
       generator.text(
-        _sanitizePrintable('Generated: ' + nowLabel),
+        _sanitizePrintable('Generated: $nowLabel'),
         styles: const PosStyles(align: PosAlign.center),
       ),
     );
@@ -239,7 +239,7 @@ GOODS CARRIED AT OWNER’S RISK
 
     bytes.addAll(
       generator.text(
-        _sanitizePrintable('Ref: ' + (parcel.Document_No ?? '-')),
+        _sanitizePrintable('Ref: ${parcel.Document_No ?? '-'}'),
         styles: const PosStyles(bold: true),
       ),
     );
@@ -247,7 +247,7 @@ GOODS CARRIED AT OWNER’S RISK
       bytes.addAll(
         generator.text(
           _sanitizePrintable(
-            'Date: ' + DateFormat('dd MMM yyyy').format(parcel.Date_sent!),
+            'Date: ${DateFormat('dd MMM yyyy').format(parcel.Date_sent!)}',
           ),
         ),
       );
@@ -259,10 +259,7 @@ GOODS CARRIED AT OWNER’S RISK
       bytes.addAll(
         generator.text(
           _sanitizePrintable(
-            'Route: ' +
-                (from?.isNotEmpty == true ? from! : '-') +
-                ' -> ' +
-                (to?.isNotEmpty == true ? to! : '-'),
+            'Route: ${from?.isNotEmpty == true ? from! : '-'} -> ${to?.isNotEmpty == true ? to! : '-'}',
           ),
         ),
       );
@@ -271,7 +268,7 @@ GOODS CARRIED AT OWNER’S RISK
     final senderLine = _formatContact(parcel.Sender_Name, parcel.Sender_Phone,
         maskPhone: true);
     if (senderLine != null) {
-      bytes.addAll(generator.text(_sanitizePrintable('Sender: ' + senderLine)));
+      bytes.addAll(generator.text(_sanitizePrintable('Sender: $senderLine')));
     }
 
     final receiverLine = _formatContact(
@@ -281,7 +278,7 @@ GOODS CARRIED AT OWNER’S RISK
     );
     if (receiverLine != null) {
       bytes.addAll(
-        generator.text(_sanitizePrintable('Receiver: ' + receiverLine)),
+        generator.text(_sanitizePrintable('Receiver: $receiverLine')),
       );
     }
 
@@ -289,20 +286,20 @@ GOODS CARRIED AT OWNER’S RISK
     if (driver != null && driver.isNotEmpty) {
       final vehicle = parcel.Vehicle?.trim();
       final driverLine = vehicle != null && vehicle.isNotEmpty
-          ? 'Driver: ' + driver + ' (' + vehicle + ')'
-          : 'Driver: ' + driver;
+          ? 'Driver: $driver ($vehicle)'
+          : 'Driver: $driver';
       bytes.addAll(generator.text(_sanitizePrintable(driverLine)));
     }
 
     bytes.addAll(
-      generator.text(_sanitizePrintable('Status: ' + dispatchStatus)),
+      generator.text(_sanitizePrintable('Status: $dispatchStatus')),
     );
 
     if (parcel.Who_to_Pay != null) {
       final responsibility =
           parcel.Who_to_Pay == WhoToPay.Receiver ? 'Receiver' : 'Sender';
       bytes.addAll(
-        generator.text(_sanitizePrintable('Charge to: ' + responsibility)),
+        generator.text(_sanitizePrintable('Charge to: $responsibility')),
       );
     }
 
@@ -314,7 +311,7 @@ GOODS CARRIED AT OWNER’S RISK
     if (totalDetails > 0) {
       bytes.addAll(
         generator.text(
-          _sanitizePrintable('Items total: ' + currency.format(totalDetails)),
+          _sanitizePrintable('Items total: ${currency.format(totalDetails)}'),
         ),
       );
     }
@@ -322,14 +319,14 @@ GOODS CARRIED AT OWNER’S RISK
       bytes.addAll(
         generator.text(
           _sanitizePrintable(
-            'Amount paid: ' + currency.format(parcel.Amount_Paid!),
+            'Amount paid: ${currency.format(parcel.Amount_Paid!)}',
           ),
         ),
       );
     }
     bytes.addAll(
       generator.text(
-        _sanitizePrintable('Paid: ' + ((parcel.Paid ?? false) ? 'Yes' : 'No')),
+        _sanitizePrintable('Paid: ${(parcel.Paid ?? false) ? 'Yes' : 'No'}'),
       ),
     );
 
@@ -346,9 +343,9 @@ GOODS CARRIED AT OWNER’S RISK
         final hasDescription = detail.Description?.trim().isNotEmpty == true;
         final label = hasDescription
             ? detail.Description!.trim()
-            : 'Item ' + (i + 1).toString();
+            : 'Item ${i + 1}';
         final qty = detail.No_Of_Items ?? 0;
-        final qtyLabel = qty > 0 ? 'x' + qty.toString() + ' ' : '';
+        final qtyLabel = qty > 0 ? 'x$qty ' : '';
         final amount = detail.Amount;
         final line = StringBuffer('- ')
           ..write(qtyLabel)
@@ -357,14 +354,14 @@ GOODS CARRIED AT OWNER’S RISK
         if (amount != null && amount > 0) {
           bytes.addAll(
             generator.text(
-              _sanitizePrintable('  Amt: ' + currency.format(amount)),
+              _sanitizePrintable('  Amt: ${currency.format(amount)}'),
               styles: const PosStyles(align: PosAlign.right),
             ),
           );
         }
         final note = detail.Remarks?.trim();
         if (note != null && note.isNotEmpty) {
-          bytes.addAll(generator.text(_sanitizePrintable('  Note: ' + note)));
+          bytes.addAll(generator.text(_sanitizePrintable('  Note: $note')));
         }
       }
       bytes.addAll(generator.hr(ch: '-'));
@@ -372,7 +369,7 @@ GOODS CARRIED AT OWNER’S RISK
 
     final note = parcel.Notes?.trim();
     if (note != null && note.isNotEmpty) {
-      bytes.addAll(generator.text(_sanitizePrintable('Notes: ' + note)));
+      bytes.addAll(generator.text(_sanitizePrintable('Notes: $note')));
     }
 
     bytes.addAll(
@@ -412,13 +409,13 @@ GOODS CARRIED AT OWNER’S RISK
         .map((l) => l.trim())
         .where((l) => l.isNotEmpty)
         .toList();
-    int? _pendingUnderlineIndex;
+    int? pendingUnderlineIndex;
     for (var i = 0; i < pendingHeaderLines.length; i++) {
       var line = pendingHeaderLines[i];
       final PosStyles styles;
 
       if (line.toUpperCase() == 'NOTE') {
-        _pendingUnderlineIndex = i;
+        pendingUnderlineIndex = i;
         styles = const PosStyles(
           align: PosAlign.center,
           bold: true,
@@ -426,8 +423,8 @@ GOODS CARRIED AT OWNER’S RISK
           height: PosTextSize.size1,
           width: PosTextSize.size1,
         );
-      } else if (_pendingUnderlineIndex != null &&
-          i == _pendingUnderlineIndex + 1) {
+      } else if (pendingUnderlineIndex != null &&
+          i == pendingUnderlineIndex + 1) {
         // Simulate italic for the following line
         line = '/$line/';
         styles = const PosStyles(
@@ -435,7 +432,7 @@ GOODS CARRIED AT OWNER’S RISK
           height: PosTextSize.size1,
           width: PosTextSize.size1,
         );
-        _pendingUnderlineIndex = null;
+        pendingUnderlineIndex = null;
       } else if (i == 1) {
         styles = const PosStyles(
           align: PosAlign.center,
@@ -463,13 +460,13 @@ GOODS CARRIED AT OWNER’S RISK
     }
     bytes.addAll(
       generator.text(
-        _sanitizePrintable('Generated: ' + nowLabel),
+        _sanitizePrintable('Generated: $nowLabel'),
         styles: const PosStyles(align: PosAlign.center),
       ),
     );
     bytes.addAll(
       generator.text(
-        _sanitizePrintable('Total pending: ' + parcels.length.toString()),
+        _sanitizePrintable('Total pending: ${parcels.length}'),
         styles: const PosStyles(align: PosAlign.center),
       ),
     );
@@ -478,7 +475,7 @@ GOODS CARRIED AT OWNER’S RISK
     for (final parcel in parcels) {
       bytes.addAll(
         generator.text(
-          _sanitizePrintable('Ref: ' + (parcel.Document_No ?? '-')),
+          _sanitizePrintable('Ref: ${parcel.Document_No ?? '-'}'),
           styles: const PosStyles(bold: true),
         ),
       );
@@ -489,10 +486,7 @@ GOODS CARRIED AT OWNER’S RISK
         bytes.addAll(
           generator.text(
             _sanitizePrintable(
-              'Route: ' +
-                  (from?.isNotEmpty == true ? from! : '-') +
-                  ' -> ' +
-                  (to?.isNotEmpty == true ? to! : '-'),
+              'Route: ${from?.isNotEmpty == true ? from! : '-'} -> ${to?.isNotEmpty == true ? to! : '-'}',
             ),
           ),
         );
@@ -505,7 +499,7 @@ GOODS CARRIED AT OWNER’S RISK
       );
       if (senderLine != null) {
         bytes.addAll(
-          generator.text(_sanitizePrintable('Sender: ' + senderLine)),
+          generator.text(_sanitizePrintable('Sender: $senderLine')),
         );
       }
 
@@ -516,14 +510,14 @@ GOODS CARRIED AT OWNER’S RISK
       );
       if (receiverLine != null) {
         bytes.addAll(
-          generator.text(_sanitizePrintable('Receiver: ' + receiverLine)),
+          generator.text(_sanitizePrintable('Receiver: $receiverLine')),
         );
       }
 
       final sentDate = parcel.Date_sent != null
           ? DateFormat('dd MMM yyyy').format(parcel.Date_sent!)
           : 'N/A';
-      bytes.addAll(generator.text(_sanitizePrintable('Date: ' + sentDate)));
+      bytes.addAll(generator.text(_sanitizePrintable('Date: $sentDate')));
       bytes.addAll(generator.hr(ch: '-'));
     }
 
@@ -633,7 +627,7 @@ GOODS CARRIED AT OWNER’S RISK
     if (digits.length <= 3) return digits;
     final visible = digits.substring(digits.length - 3);
     // mask the rest with x characters, preserve formatting minimally
-    return '***${visible}';
+    return '***$visible';
   }
 
   String? _formatContact(String? name, String? phone,

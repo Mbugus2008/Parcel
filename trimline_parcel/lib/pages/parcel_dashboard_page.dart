@@ -1,5 +1,3 @@
-// import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_pos_printer_platform_image_3/flutter_pos_printer_platform_image_3.dart';
 import 'package:get/get.dart';
@@ -8,9 +6,16 @@ import 'package:intl/intl.dart';
 
 import '../controllers/parcel_controller.dart';
 import '../models/parcel_model.dart';
+import '../services/auth_service.dart';
+import '../services/connectivity_service.dart';
 import '../utilities/status_color.dart';
+import '../utils/updater.dart';
+import '../widgets/parcel_card.dart';
 import '../widgets/payment_dialog.dart';
+import '../widgets/summary_card.dart';
 import 'addeditparcel.dart';
+import 'addeditparcel_v2.dart'; // V2 for testing
+import 'login.dart';
 
 class ParcelDashboardPage extends StatefulWidget {
   const ParcelDashboardPage({super.key});
@@ -19,10 +24,12 @@ class ParcelDashboardPage extends StatefulWidget {
   State<ParcelDashboardPage> createState() => _ParcelDashboardPageState();
 }
 
-class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
+class _ParcelDashboardPageState extends State<ParcelDashboardPage>
+    with SingleTickerProviderStateMixin {
   final ParcelController _controller = Get.find<ParcelController>();
 
   late final TextEditingController _searchController;
+  late TabController _tabController;
 
   ParcelStatus? _selectedStatus;
 
@@ -30,18 +37,48 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
 
   bool _isSearching = false;
 
+  // Tab index: 0=All, 1=Pending, 2=In Transit, 3=Received, 4=Collected
+  int _selectedTabIndex = 0;
+
   @override
   void initState() {
     super.initState();
 
     _searchController = TextEditingController(text: _controller.searchQuery);
 
+    // Initialize tab controller with 5 tabs: All + 4 statuses
+    _tabController = TabController(length: 5, vsync: this);
+    _tabController.addListener(() {
+      if (!_tabController.indexIsChanging) {
+        setState(() {
+          _selectedTabIndex = _tabController.index;
+          // Update status filter based on tab
+          if (_selectedTabIndex == 0) {
+            _selectedStatus = null;
+            _controller.setStatusFilter(null);
+          } else {
+            final statuses = _controller.supportedStatuses;
+            if (_selectedTabIndex - 1 < statuses.length) {
+              _selectedStatus = statuses[_selectedTabIndex - 1];
+              _controller.setStatusFilter(_selectedStatus);
+            }
+          }
+        });
+      }
+    });
+
     _selectedStatus = _controller.statusFilter;
+
+    // Check for app updates silently on dashboard load
+    Future.delayed(const Duration(seconds: 2), () {
+      Get.find<UpdateController>().checkForUpdate(showUpToDate: false);
+    });
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _tabController.dispose();
 
     super.dispose();
   }
@@ -106,30 +143,59 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
                   key: const ValueKey('title'),
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Column(
-                      children: [
-                        const Text(
-                          'Parcel Dashboard',
-                          style: TextStyle(color: Colors.black),
-                        ),
-                        const SizedBox(width: 8),
-                        Obx(() {
-                          final device = _controller.activePrinter;
-                          if (device == null) {
-                            return const Icon(
-                              Icons.print_disabled,
-                              color: Colors.redAccent,
-                              size: 20,
-                            );
-                          } else {
-                            return const Icon(
-                              Icons.print_rounded,
-                              color: Colors.green,
-                              size: 20,
-                            );
-                          }
-                        }),
-                      ],
+                    Flexible(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Parcel Dashboard',
+                            style: TextStyle(color: Colors.black),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Connectivity indicator
+                              Obx(() {
+                                final connectivityService =
+                                    Get.find<ConnectivityService>();
+                                if (connectivityService.isOffline) {
+                                  return const Icon(
+                                    Icons.cloud_off,
+                                    color: Colors.redAccent,
+                                    size: 18,
+                                  );
+                                } else {
+                                  return const Icon(
+                                    Icons.cloud_done,
+                                    color: Colors.green,
+                                    size: 18,
+                                  );
+                                }
+                              }),
+                              const SizedBox(width: 8),
+                              // Printer indicator
+                              Obx(() {
+                                final device = _controller.activePrinter;
+                                if (device == null) {
+                                  return const Icon(
+                                    Icons.print_disabled,
+                                    color: Colors.redAccent,
+                                    size: 18,
+                                  );
+                                } else {
+                                  return const Icon(
+                                    Icons.print_rounded,
+                                    color: Colors.green,
+                                    size: 18,
+                                  );
+                                }
+                              }),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                     if (hasActiveFilters)
                       Padding(
@@ -193,16 +259,46 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
 
           // hide the rest of the actions while searching
           if (!_isSearching) ...[
-            IconButton(
+            PopupMenuButton<ParcelStatus?>(
               tooltip: 'Filter by status',
-
-              // TODO: Add dropdown instead of buttomsheet
-              onPressed: _openFilterSheet,
-
               icon: Icon(
                 Icons.filter_list_rounded,
                 color: hasActiveFilters ? Colors.amber : Colors.black,
               ),
+              onSelected: (status) => _onStatusFilterChanged(status),
+              itemBuilder: (context) => [
+                PopupMenuItem<ParcelStatus?>(
+                  value: null,
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.filter_list_rounded,
+                        color: _selectedStatus == null
+                            ? theme.colorScheme.primary
+                            : Colors.grey,
+                      ),
+                      const SizedBox(width: 12),
+                      const Text('All statuses'),
+                    ],
+                  ),
+                ),
+                const PopupMenuDivider(),
+                ..._controller.supportedStatuses.map(
+                  (status) => PopupMenuItem<ParcelStatus?>(
+                    value: status,
+                    child: Row(
+                      children: [
+                        Icon(
+                          _statusIcon(status),
+                          color: getStatusColor(status),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(_controller.statusLabel(status)),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
             if (hasActiveFilters)
               IconButton(
@@ -220,61 +316,73 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
         ],
       ),
       drawer: _buildDrawer(context),
+      floatingActionButton: FloatingActionButton.extended(
+        // Using V2 for testing - change back to AddEditParcelPage if issues
+        onPressed: () => Get.to(() => const AddEditParcelPageV2()),
+        backgroundColor: const Color(0xFF233556),
+        foregroundColor: Colors.white,
+        elevation: 4,
+        icon: const Icon(Icons.add_rounded),
+        label: const Text(
+          'New Parcel',
+          style: TextStyle(fontWeight: FontWeight.w600),
+        ),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       body: Container(
-        decoration: const BoxDecoration(color: Colors.white),
+        decoration: const BoxDecoration(color: Color(0xFFF5F7FA)),
         child: SafeArea(
           child: Obx(() {
-            if (_controller.isLoading) {
+            // Access reactive values to trigger rebuilds
+            final isLoading = _controller.isLoadingRx.value;
+            final parcels = _controller.parcelsRx.toList();
+            final filteredParcels = _controller.filteredParcelsRx.toList();
+            final searchQuery = _controller.searchQueryRx.value;
+            final statusFilter = _controller.statusFilterRx.value;
+
+            if (isLoading) {
               return const Center(child: CircularProgressIndicator());
             }
 
-            if (_controller.parcels.isEmpty) {
-              return const Center(
-                child: Text(
-                  'No parcels available yet',
-                  style: TextStyle(color: Colors.black87),
-                ),
-              );
+            if (parcels.isEmpty) {
+              return _buildEmptyState(context);
             }
 
-            final hasFilters = _controller.searchQuery.isNotEmpty ||
-                _controller.statusFilter != null;
+            final hasFilters = searchQuery.isNotEmpty || statusFilter != null;
 
-            final visibleParcels =
-                hasFilters ? _controller.filteredParcels : _controller.parcels;
+            final visibleParcels = hasFilters ? filteredParcels : parcels;
 
-            final groups = _groupParcelsByStatus(visibleParcels);
+            final groups =
+                _groupParcelsByStatus(parcels); // Use all parcels for counts
 
-            final firstNonEmptyIndex = _firstNonEmptyStep(groups);
+            // Get parcels for current tab
+            final tabParcels =
+                _getTabParcels(visibleParcels, _selectedTabIndex);
 
-            final statuses = _controller.supportedStatuses;
-
-            final currentIndex = statuses.isEmpty
-                ? 0
-                : _currentStep.clamp(0, statuses.length - 1);
-
-            final currentParcels = statuses.isEmpty
-                ? const <Parcel>[]
-                : groups[statuses[currentIndex]] ?? <Parcel>[];
-
-            if (currentParcels.isEmpty &&
-                firstNonEmptyIndex != null &&
-                firstNonEmptyIndex != currentIndex) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (mounted) {
-                  setState(() => _currentStep = firstNonEmptyIndex);
-                }
-              });
-            }
-
-            return ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
-              children: [
-                if (hasFilters && visibleParcels.isEmpty)
-                  _buildNoResultsBanner(context),
-                _buildStatusStepper(context, groups),
-                const SizedBox(height: 2),
-              ],
+            return RefreshIndicator(
+              onRefresh: () => _controller.loadParcels(),
+              color: Theme.of(context).colorScheme.primary,
+              child: Column(
+                children: [
+                  // Summary Cards Section
+                  _buildSummaryCards(context, groups, parcels),
+                  const SizedBox(height: 8),
+                  // Tab Bar
+                  _buildStatusTabs(context, groups),
+                  // Parcel List
+                  Expanded(
+                    child: tabParcels.isEmpty
+                        ? _buildNoResultsBanner(context)
+                        : ListView.builder(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            itemCount: tabParcels.length,
+                            itemBuilder: (context, index) {
+                              return ParcelCard(parcel: tabParcels[index]);
+                            },
+                          ),
+                  ),
+                ],
+              ),
             );
           }),
         ),
@@ -282,93 +390,238 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
     );
   }
 
-  Future<void> _openFilterSheet() async {
+  /// Get parcels based on selected tab index
+  List<Parcel> _getTabParcels(List<Parcel> parcels, int tabIndex) {
+    if (tabIndex == 0) return parcels; // All parcels
     final statuses = _controller.supportedStatuses;
+    if (tabIndex - 1 >= statuses.length) return parcels;
+    final targetStatus = statuses[tabIndex - 1];
+    return parcels.where((p) => p.Status == targetStatus).toList();
+  }
 
-    await showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: const Color(0xFF1F2A44),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (sheetContext) {
-        final theme = Theme.of(sheetContext);
+  /// Build summary cards row
+  Widget _buildSummaryCards(
+    BuildContext context,
+    Map<ParcelStatus, List<Parcel>> groups,
+    List<Parcel> allParcels,
+  ) {
+    final pending = groups[ParcelStatus.pending]?.length ?? 0;
+    final inTransit = groups[ParcelStatus.inTransit]?.length ?? 0;
+    final received = groups[ParcelStatus.received]?.length ?? 0;
+    final collected = groups[ParcelStatus.collected]?.length ?? 0;
 
-        final bottomInset = MediaQuery.of(sheetContext).viewPadding.bottom;
+    // Count today's parcels
+    final today = DateTime.now();
+    final todayParcels = allParcels.where((p) {
+      final date = p.Date_sent;
+      if (date == null) return false;
+      return date.year == today.year &&
+          date.month == today.month &&
+          date.day == today.day;
+    }).length;
 
-        return Padding(
-          padding: EdgeInsets.fromLTRB(20, 24, 20, 24 + bottomInset),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+      child: Column(
+        children: [
+          // First row: Pending, In Transit
+          Row(
             children: [
-              Row(
-                children: [
-                  Text(
-                    'Filter by status',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    tooltip: 'Close',
-                    onPressed: () => Navigator.of(sheetContext).pop(),
-                    icon: const Icon(
-                      Icons.close_rounded,
-                      color: Colors.white60,
-                    ),
-                  ),
-                ],
+              Expanded(
+                child: SummaryCard(
+                  icon: Icons.pending_actions_rounded,
+                  value: '$pending',
+                  title: 'Pending',
+                  gradientColors: const [Color(0xFFFF6B9D), Color(0xFFC44569)],
+                  onTap: () => _tabController.animateTo(1),
+                ),
               ),
-              const SizedBox(height: 12),
-              _buildFilterOption(
-                sheetContext,
-                label: 'All statuses',
-                icon: const Icon(
-                  Icons.filter_list_rounded,
-                  color: Colors.white70,
+              const SizedBox(width: 12),
+              Expanded(
+                child: SummaryCard(
+                  icon: Icons.local_shipping_rounded,
+                  value: '$inTransit',
+                  title: 'In Transit',
+                  gradientColors: const [Color(0xFF4FACFE), Color(0xFF00F2FE)],
+                  onTap: () => _tabController.animateTo(2),
                 ),
-                selected: _selectedStatus == null,
-                onTap: () {
-                  Navigator.of(sheetContext).pop();
-
-                  _onStatusFilterChanged(null);
-                },
               ),
-              const Divider(color: Colors.white24, height: 24),
-              for (final status in statuses)
-                _buildFilterOption(
-                  sheetContext,
-                  label: _controller.statusLabel(status),
-                  icon: Icon(
-                    _statusIcon(status),
-                    color: getStatusColor(status),
-                  ),
-                  selected: _selectedStatus == status,
-                  onTap: () {
-                    Navigator.of(sheetContext).pop();
-
-                    _onStatusFilterChanged(status);
-                  },
-                ),
-              if (_selectedStatus != null || _controller.searchQuery.isNotEmpty)
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () {
-                      Navigator.of(sheetContext).pop();
-
-                      _onClearFilters();
-                    },
-                    child: const Text('Clear filters'),
-                  ),
-                ),
             ],
           ),
-        );
-      },
+          const SizedBox(height: 12),
+          // Second row: Received, Collected, Today
+          Row(
+            children: [
+              Expanded(
+                child: SummaryCard(
+                  icon: Icons.home_work_rounded,
+                  value: '$received',
+                  title: 'Received',
+                  gradientColors: const [Color(0xFF43E97B), Color(0xFF38F9D7)],
+                  onTap: () => _tabController.animateTo(3),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: SummaryCard(
+                  icon: Icons.verified_rounded,
+                  value: '$collected',
+                  title: 'Collected',
+                  gradientColors: const [Color(0xFFA18CD1), Color(0xFFFBC2EB)],
+                  onTap: () => _tabController.animateTo(4),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: SummaryCard(
+                  icon: Icons.today_rounded,
+                  value: '$todayParcels',
+                  title: 'Today',
+                  gradientColors: const [Color(0xFFFA709A), Color(0xFFFEE140)],
+                  onTap: () {}, // Could filter by date
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Build horizontal status tabs
+  Widget _buildStatusTabs(
+    BuildContext context,
+    Map<ParcelStatus, List<Parcel>> groups,
+  ) {
+    final theme = Theme.of(context);
+    final statuses = _controller.supportedStatuses;
+    final allCount =
+        groups.values.fold<int>(0, (sum, list) => sum + list.length);
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: TabBar(
+        controller: _tabController,
+        isScrollable: true,
+        labelColor: theme.colorScheme.primary,
+        unselectedLabelColor: Colors.grey.shade600,
+        indicatorSize: TabBarIndicatorSize.tab,
+        indicator: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          color: theme.colorScheme.primary.withOpacity(0.1),
+        ),
+        dividerColor: Colors.transparent,
+        labelPadding: const EdgeInsets.symmetric(horizontal: 8),
+        padding: const EdgeInsets.all(6),
+        tabs: [
+          _buildTab('All', allCount, null),
+          ...statuses.map((status) => _buildTab(
+                _controller.statusLabel(status),
+                groups[status]?.length ?? 0,
+                status,
+              )),
+        ],
+      ),
+    );
+  }
+
+  /// Build individual tab with count badge
+  Widget _buildTab(String label, int count, ParcelStatus? status) {
+    final color = status != null ? getStatusColor(status) : Colors.grey;
+    return Tab(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(label),
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                '$count',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Builds an attractive empty state when no parcels exist
+  Widget _buildEmptyState(BuildContext context) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Illustration icon
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.inventory_2_outlined,
+                size: 80,
+                color: theme.colorScheme.primary.withOpacity(0.7),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'No Parcels Yet',
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Start by logging your first parcel.\nAll your shipments will appear here.',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: Colors.grey[600],
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 32),
+            ElevatedButton.icon(
+              onPressed: () => Get.to(() => const AddEditParcelPage()),
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('Log New Parcel'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 14,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -678,30 +931,6 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
     );
   }
 
-  Widget _buildFilterOption(
-    BuildContext context, {
-    required String label,
-    required Widget icon,
-    required bool selected,
-    required VoidCallback onTap,
-  }) {
-    final theme = Theme.of(context);
-
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      dense: true,
-      leading: icon,
-      title: Text(
-        label,
-        style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white),
-      ),
-      trailing: selected
-          ? const Icon(Icons.check_rounded, color: Colors.white70)
-          : null,
-      onTap: onTap,
-    );
-  }
-
   Widget _buildSearchField(
     BuildContext context, {
     VoidCallback? onSubmitted,
@@ -716,36 +945,37 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
       autofocus: autofocus,
       onChanged: _onSearchChanged,
       onSubmitted: (_) => onSubmitted?.call(),
-      style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white),
-      cursorColor: Colors.white70,
+      style: theme.textTheme.bodyMedium?.copyWith(color: Colors.black87),
+      cursorColor: Colors.blue,
       decoration: InputDecoration(
         hintText: 'Search parcels...',
-        hintStyle: theme.textTheme.bodyMedium?.copyWith(color: Colors.white54),
-        prefixIcon: const Icon(Icons.search, color: Colors.white54),
+        hintStyle:
+            theme.textTheme.bodyMedium?.copyWith(color: Colors.grey.shade600),
+        prefixIcon: Icon(Icons.search, color: Colors.grey.shade600),
         suffixIcon: _searchController.text.isEmpty
             ? null
             : IconButton(
                 icon: const Icon(Icons.clear),
-                color: Colors.white54,
+                color: Colors.grey.shade600,
                 onPressed: _clearSearch,
               ),
         filled: true,
-        fillColor: Colors.white.withValues(alpha: 0.08),
+        fillColor: Colors.white,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 12,
           vertical: 12,
         ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+          borderSide: BorderSide(color: Colors.grey.shade300),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.18)),
+          borderSide: BorderSide(color: Colors.grey.shade300),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.4)),
+          borderSide: const BorderSide(color: Colors.blue, width: 2),
         ),
       ),
     );
@@ -830,32 +1060,41 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
   Widget _buildNoResultsBanner(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.search_off_rounded, color: Colors.white70),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              'No parcels match your current filters.',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: Colors.white70,
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.search_off_rounded,
+              size: 64,
+              color: Colors.grey.shade400,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'No parcels found',
+              style: theme.textTheme.titleMedium?.copyWith(
+                color: Colors.grey.shade700,
+                fontWeight: FontWeight.w600,
               ),
             ),
-          ),
-          TextButton(
-            onPressed: _onClearFilters,
-            style: TextButton.styleFrom(foregroundColor: Colors.white70),
-            child: const Text('Clear filters'),
-          ),
-        ],
+            const SizedBox(height: 8),
+            Text(
+              'No parcels match your current filters.\nTry adjusting your search or filters.',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: Colors.grey.shade500,
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextButton.icon(
+              onPressed: _onClearFilters,
+              icon: const Icon(Icons.clear_all_rounded),
+              label: const Text('Clear filters'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1219,7 +1458,6 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
         route = parcel.From ?? '';
         break;
     }
-    ;
     final sentDate = parcel.Date_sent != null
         ? DateFormat('dd MMM').format(parcel.Date_sent!)
         : 'No date';
@@ -1296,6 +1534,19 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
           theme: theme,
           icon: Icons.scale_rounded,
           label: weight,
+          accentColor: statusColor,
+        ),
+      );
+    }
+
+    // Add number of items
+    final itemsCount = parcel.parcelDetails.length;
+    if (itemsCount > 0) {
+      infoPills.add(
+        _buildInfoPill(
+          theme: theme,
+          icon: Icons.inventory_2_rounded,
+          label: '$itemsCount ${itemsCount == 1 ? 'item' : 'items'}',
           accentColor: statusColor,
         ),
       );
@@ -1605,20 +1856,48 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  Text(
-                    "Trimline Parcel",
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    "Manage shipments at a glance",
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: Colors.white70,
-                    ),
-                  ),
+                  // User avatar
+                  Obx(() {
+                    final user = Get.find<AuthService>().currentUser;
+                    return CircleAvatar(
+                      radius: 28,
+                      backgroundColor: Colors.white24,
+                      child: Text(
+                        user?.name?.isNotEmpty == true
+                            ? user!.name![0].toUpperCase()
+                            : 'U',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    );
+                  }),
+                  const SizedBox(height: 12),
+                  // User name
+                  Obx(() {
+                    final user = Get.find<AuthService>().currentUser;
+                    return Text(
+                      user?.name ?? 'Welcome',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    );
+                  }),
+                  const SizedBox(height: 2),
+                  // User role/account type
+                  Obx(() {
+                    final user = Get.find<AuthService>().currentUser;
+                    final role = user?.accountType?.displayName ?? 'User';
+                    return Text(
+                      role,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: Colors.white70,
+                      ),
+                    );
+                  }),
                 ],
               ),
             ),
@@ -1636,14 +1915,37 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
                 Get.to(() => const AddEditParcelPage());
               },
             ),
-            ListTile(
-              leading: const Icon(Icons.filter_list_rounded),
-              title: const Text("Filter parcels"),
-              onTap: () {
-                Navigator.of(context).pop();
-                Future.microtask(_openFilterSheet);
-              },
-            ),
+            const Divider(),
+            Obx(() {
+              final connectivityService = Get.find<ConnectivityService>();
+              return ListTile(
+                leading: Icon(
+                  connectivityService.isOffline ? Icons.cloud_off : Icons.sync,
+                  color: connectivityService.isOffline ? Colors.red : null,
+                ),
+                title: Text(
+                  connectivityService.isOffline ? "Offline Mode" : "Sync Data",
+                ),
+                subtitle: Text(
+                  connectivityService.isOffline
+                      ? "Changes will sync when online"
+                      : "Tap to refresh data",
+                ),
+                onTap: connectivityService.isOffline
+                    ? null
+                    : () async {
+                        Navigator.of(context).pop();
+                        await _controller.loadParcels();
+                        await Get.find<ConnectivityService>().forceCheck();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Data refreshed'),
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      },
+              );
+            }),
             Obx(() {
               final device = _controller.activePrinter;
               final subtitleText = () {
@@ -1669,10 +1971,28 @@ class _ParcelDashboardPageState extends State<ParcelDashboardPage> {
             }),
             const Divider(),
             ListTile(
+              leading: const Icon(Icons.system_update_rounded),
+              title: const Text("Check for Updates"),
+              subtitle: const Text("Download latest version"),
+              onTap: () {
+                Navigator.of(context).pop();
+                Get.find<UpdateController>().checkForUpdate(showUpToDate: true);
+              },
+            ),
+            ListTile(
               leading: const Icon(Icons.help_outline_rounded),
               title: const Text("Support"),
               subtitle: const Text("Contact logistics for help"),
               onTap: () => Navigator.of(context).pop(),
+            ),
+            ListTile(
+              leading: const Icon(Icons.exit_to_app_rounded, color: Colors.red),
+              title: const Text("Logout", style: TextStyle(color: Colors.red)),
+              onTap: () async {
+                Navigator.of(context).pop();
+                await Get.find<AuthService>().logout();
+                Get.offAll(() => const LoginScreen());
+              },
             ),
           ],
         ),

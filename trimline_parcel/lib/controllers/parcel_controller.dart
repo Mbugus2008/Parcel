@@ -35,6 +35,7 @@ class ParcelController extends GetxController {
   final RxList<Parcel> _parcels = <Parcel>[].obs;
   final RxList<Parcel> _filteredParcels = <Parcel>[].obs;
   final RxBool _isLoading = true.obs;
+  final RxBool _isSavingParcel = false.obs;
   final RxString _searchQuery = ''.obs;
   final Rx<ParcelStatus?> _statusFilter = Rx<ParcelStatus?>(null);
 
@@ -56,6 +57,7 @@ class ParcelController extends GetxController {
       .toList();
   List<Parcel> get filteredParcels => _filteredParcels;
   bool get isLoading => _isLoading.value;
+  bool get isSavingParcel => _isSavingParcel.value;
   String get searchQuery => _searchQuery.value;
   ParcelStatus? get statusFilter => _statusFilter.value;
   List<ParcelStatus> get supportedStatuses => _statusOrder;
@@ -74,6 +76,7 @@ class ParcelController extends GetxController {
   RxList<Parcel> get parcelsRx => _parcels;
   RxList<Parcel> get filteredParcelsRx => _filteredParcels;
   RxBool get isLoadingRx => _isLoading;
+  RxBool get isSavingParcelRx => _isSavingParcel;
   RxString get searchQueryRx => _searchQuery;
   Rx<ParcelStatus?> get statusFilterRx => _statusFilter;
 
@@ -352,7 +355,7 @@ class ParcelController extends GetxController {
         _filterParcels();
       } catch (e) {
         if (kDebugMode) {
-          debugPrint('Failed to update parcel transport info: ' + e.toString());
+          debugPrint('Failed to update parcel transport info: $e');
         }
         Get.snackbar(
           'Error',
@@ -403,7 +406,7 @@ class ParcelController extends GetxController {
       printed = true;
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('Dispatch printing failed: ' + e.toString());
+        debugPrint('Dispatch printing failed: $e');
       }
       Get.snackbar(
         'Print failed',
@@ -569,35 +572,53 @@ class ParcelController extends GetxController {
     }
   }
 
-  Future<void> addParcel(Parcel parcel) async {
-    _isLoading.value = true;
+  Future<bool> addParcel(Parcel parcel) async {
+    _isSavingParcel.value = true;
     try {
+      if (kDebugMode) {
+        debugPrint('📦 Adding parcel: ${parcel.Document_No}');
+        debugPrint('   Sender: ${parcel.Sender_Name}');
+        debugPrint('   From: ${parcel.From} → To: ${parcel.To}');
+      }
+
       await _dbHelper.insertParcel(parcel);
+
+      if (kDebugMode) {
+        debugPrint('✅ Parcel inserted into database');
+      }
 
       // TODO: POST parcel to backend create endpoint once provided.
 
       await loadParcels();
+
+      if (kDebugMode) {
+        debugPrint('✅ Parcels reloaded. Total count: ${_parcels.length}');
+      }
+
       Get.snackbar(
         'Success',
-        'Parcel  added successfully.',
+        'Parcel ${parcel.Document_No} added successfully.',
         snackPosition: SnackPosition.BOTTOM,
       );
-    } catch (e) {
+      return true;
+    } catch (e, stackTrace) {
       if (kDebugMode) {
-        debugPrint('Error adding parcel: ');
+        debugPrint('❌ Error adding parcel: $e');
+        debugPrint('   Stack trace: $stackTrace');
       }
       Get.snackbar(
         'Error',
         'Failed to add parcel. Please try again.',
         snackPosition: SnackPosition.BOTTOM,
       );
+      return false;
     } finally {
-      _isLoading.value = false;
+      _isSavingParcel.value = false;
     }
   }
 
-  Future<void> updateParcel(Parcel parcel) async {
-    _isLoading.value = true;
+  Future<bool> updateParcel(Parcel parcel) async {
+    _isSavingParcel.value = true;
     try {
       await _dbHelper.updateParcel(parcel);
 
@@ -609,6 +630,7 @@ class ParcelController extends GetxController {
         'Parcel  updated successfully.',
         snackPosition: SnackPosition.BOTTOM,
       );
+      return true;
     } catch (e) {
       if (kDebugMode) {
         debugPrint('Error updating parcel: ');
@@ -618,8 +640,9 @@ class ParcelController extends GetxController {
         'Failed to update parcel. Please try again.',
         snackPosition: SnackPosition.BOTTOM,
       );
+      return false;
     } finally {
-      _isLoading.value = false;
+      _isSavingParcel.value = false;
     }
   }
 
@@ -757,8 +780,6 @@ class ParcelController extends GetxController {
     selectedDate = parcel.Date_sent ?? DateTime.now();
     paid = parcel.Paid ?? false;
   }
-
-  void PopulateFormWithParcel(Parcel parcel) => populateFormWithParcel(parcel);
 
   Future<void> fetchAndSavePricingRates(String url) async {
     try {

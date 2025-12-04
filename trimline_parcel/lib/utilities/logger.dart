@@ -39,9 +39,9 @@ class _DailyFileOutput extends LogOutput {
     event.lines.forEach(print);
 
     // Write to today's log file
-    event.lines.forEach((line) {
+    for (var line in event.lines) {
       LogWriter.write(line).catchError((e) => print("Log write error: $e"));
-    });
+    }
   }
 }
 

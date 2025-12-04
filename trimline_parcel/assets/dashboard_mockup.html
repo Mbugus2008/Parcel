@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Recommendations - Visual Mockup</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+        
+        .comparison {
+            display: flex;
+            gap: 40px;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin-bottom: 40px;
+        }
+        
+        .mockup-container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.1);
+            overflow: hidden;
+            width: 375px;
+        }
+        
+        .mockup-label {
+            background: #333;
+            color: white;
+            padding: 12px 16px;
+            font-weight: 600;
+            text-align: center;
+        }
+        
+        .mockup-label.current { background: #e53935; }
+        .mockup-label.proposed { background: #43a047; }
+        
+        /* Phone Frame */
+        .phone-frame {
+            background: #fafafa;
+            height: 667px;
+            overflow-y: auto;
+        }
+        
+        /* App Bar */
+        .app-bar {
+            background: white;
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border-bottom: 1px solid #eee;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        
+        .app-bar .material-icons {
+            color: #333;
+        }
+        
+        .app-bar-title {
+            flex: 1;
+            font-weight: 600;
+            font-size: 18px;
+        }
+        
+        .status-indicators {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+        
+        .indicator.online { background: #4caf50; }
+        .indicator.printer { background: #2196f3; }
+        
+        /* Summary Cards - NEW */
+        .summary-cards {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            padding: 16px;
+        }
+        
+        .summary-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 12px;
+            padding: 16px;
+            color: white;
+        }
+        
+        .summary-card.pending { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+        .summary-card.transit { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
+        .summary-card.delivered { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); }
+        .summary-card.today { background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); }
+        
+        .summary-card-value {
+            font-size: 32px;
+            font-weight: 700;
+        }
+        
+        .summary-card-label {
+            font-size: 12px;
+            opacity: 0.9;
+            margin-top: 4px;
+        }
+        
+        .summary-card-icon {
+            float: right;
+            opacity: 0.3;
+            font-size: 40px;
+        }
+        
+        /* Tab Navigation - NEW */
+        .tab-bar {
+            display: flex;
+            background: white;
+            border-bottom: 2px solid #eee;
+            overflow-x: auto;
+        }
+        
+        .tab {
+            flex: 1;
+            padding: 12px 8px;
+            text-align: center;
+            font-size: 12px;
+            font-weight: 500;
+            color: #666;
+            border-bottom: 3px solid transparent;
+            cursor: pointer;
+            min-width: 70px;
+        }
+        
+        .tab.active {
+            color: #1976d2;
+            border-bottom-color: #1976d2;
+        }
+        
+        .tab-count {
+            display: inline-block;
+            background: #e3f2fd;
+            color: #1976d2;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            margin-top: 4px;
+        }
+        
+        .tab.active .tab-count {
+            background: #1976d2;
+            color: white;
+        }
+        
+        /* Parcel Cards - NEW */
+        .parcel-list {
+            padding: 12px;
+        }
+        
+        .parcel-card {
+            background: white;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            border-left: 4px solid #ff9800;
+        }
+        
+        .parcel-card.pending { border-left-color: #ff9800; }
+        .parcel-card.transit { border-left-color: #2196f3; }
+        .parcel-card.delivered { border-left-color: #4caf50; }
+        
+        .parcel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 12px;
+        }
+        
+        .parcel-id {
+            font-weight: 600;
+            font-size: 14px;
+            color: #333;
+        }
+        
+        .parcel-date {
+            font-size: 12px;
+            color: #999;
+        }
+        
+        .parcel-status {
+            font-size: 11px;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-weight: 500;
+        }
+        
+        .parcel-status.pending { background: #fff3e0; color: #e65100; }
+        .parcel-status.transit { background: #e3f2fd; color: #1565c0; }
+        .parcel-status.delivered { background: #e8f5e9; color: #2e7d32; }
+        
+        .parcel-route {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 12px;
+            font-size: 13px;
+        }
+        
+        .route-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #1976d2;
+        }
+        
+        .route-line {
+            flex: 1;
+            height: 2px;
+            background: linear-gradient(90deg, #1976d2, #4caf50);
+        }
+        
+        .parcel-details {
+            display: flex;
+            gap: 16px;
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .parcel-detail {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        .parcel-detail .material-icons {
+            font-size: 16px;
+            color: #999;
+        }
+        
+        .parcel-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid #f0f0f0;
+        }
+        
+        .action-btn {
+            flex: 1;
+            padding: 8px;
+            border: none;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+        }
+        
+        .action-btn.primary {
+            background: #1976d2;
+            color: white;
+        }
+        
+        .action-btn.secondary {
+            background: #f5f5f5;
+            color: #666;
+        }
+        
+        .action-btn .material-icons {
+            font-size: 16px;
+        }
+        
+        /* Old Stepper Style */
+        .stepper {
+            padding: 16px;
+        }
+        
+        .step {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        
+        .step-indicator {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .step-circle {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: #fff3e0;
+            border: 2px solid #ff9800;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .step-circle .material-icons {
+            font-size: 16px;
+            color: #ff9800;
+        }
+        
+        .step-line {
+            width: 2px;
+            flex: 1;
+            background: #ddd;
+            min-height: 40px;
+        }
+        
+        .step-content {
+            flex: 1;
+        }
+        
+        .step-title {
+            font-weight: 600;
+            font-size: 14px;
+            margin-bottom: 8px;
+        }
+        
+        .step-parcels {
+            background: #fafafa;
+            border-radius: 8px;
+            padding: 8px;
+        }
+        
+        .mini-parcel {
+            background: white;
+            padding: 8px;
+            border-radius: 6px;
+            margin-bottom: 6px;
+            font-size: 12px;
+            border: 1px solid #eee;
+        }
+        
+        /* FAB */
+        .fab {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: #1976d2;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(25, 118, 210, 0.4);
+        }
+        
+        /* Section Headers */
+        h2 {
+            text-align: center;
+            margin: 40px 0 20px;
+            color: #333;
+        }
+        
+        .features-list {
+            max-width: 800px;
+            margin: 0 auto 40px;
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+        }
+        
+        .feature {
+            display: flex;
+            gap: 16px;
+            padding: 16px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .feature:last-child {
+            border-bottom: none;
+        }
+        
+        .feature-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            background: #e3f2fd;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .feature-icon .material-icons {
+            color: #1976d2;
+        }
+        
+        .feature-text h4 {
+            font-size: 16px;
+            margin-bottom: 4px;
+        }
+        
+        .feature-text p {
+            font-size: 14px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <h2>📱 Dashboard Comparison: Current vs Proposed</h2>
+    
+    <div class="comparison">
+        <!-- CURRENT DESIGN -->
+        <div class="mockup-container">
+            <div class="mockup-label current">❌ Current Design</div>
+            <div class="phone-frame">
+                <div class="app-bar">
+                    <span class="material-icons">menu</span>
+                    <span class="app-bar-title">Parcel Dashboard</span>
+                    <span class="material-icons">search</span>
+                    <span class="material-icons">add</span>
+                </div>
+                
+                <!-- Stepper (Current) -->
+                <div class="stepper">
+                    <div class="step">
+                        <div class="step-indicator">
+                            <div class="step-circle">
+                                <span class="material-icons">pending</span>
+                            </div>
+                            <div class="step-line"></div>
+                        </div>
+                        <div class="step-content">
+                            <div class="step-title">Pending (5)</div>
+                            <div class="step-parcels">
+                                <div class="mini-parcel">TLP-251125-ADM-0001</div>
+                                <div class="mini-parcel">TLP-251125-ADM-0002</div>
+                                <div class="mini-parcel">TLP-251125-USR-0001</div>
+                                <div style="font-size:11px;color:#999;text-align:center">...more items</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="step">
+                        <div class="step-indicator">
+                            <div class="step-circle" style="background:#e3f2fd;border-color:#2196f3">
+                                <span class="material-icons" style="color:#2196f3">local_shipping</span>
+                            </div>
+                            <div class="step-line"></div>
+                        </div>
+                        <div class="step-content">
+                            <div class="step-title">In Transit (3)</div>
+                            <div class="step-parcels">
+                                <div class="mini-parcel">SAMPLE-001</div>
+                                <div class="mini-parcel">SAMPLE-002</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="step">
+                        <div class="step-indicator">
+                            <div class="step-circle" style="background:#e8f5e9;border-color:#4caf50">
+                                <span class="material-icons" style="color:#4caf50">check_circle</span>
+                            </div>
+                        </div>
+                        <div class="step-content">
+                            <div class="step-title">Delivered (12)</div>
+                            <div class="step-parcels">
+                                <div style="font-size:12px;color:#999">Collapsed...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div style="padding:16px;background:#fff3e0;margin:16px;border-radius:8px;font-size:12px;">
+                    <strong>Issues:</strong>
+                    <ul style="margin:8px 0 0 16px;color:#666">
+                        <li>Hard to scan many parcels</li>
+                        <li>No summary stats</li>
+                        <li>Limited parcel info shown</li>
+                        <li>Vertical scrolling confusing</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <!-- PROPOSED DESIGN -->
+        <div class="mockup-container">
+            <div class="mockup-label proposed">✅ Proposed Design</div>
+            <div class="phone-frame" style="position:relative">
+                <div class="app-bar">
+                    <span class="material-icons">menu</span>
+                    <span class="app-bar-title">Parcels</span>
+                    <span class="material-icons">search</span>
+                    <span class="material-icons">filter_list</span>
+                </div>
+                
+                <!-- Summary Cards (NEW) -->
+                <div class="summary-cards">
+                    <div class="summary-card pending">
+                        <span class="material-icons summary-card-icon">pending_actions</span>
+                        <div class="summary-card-value">5</div>
+                        <div class="summary-card-label">Pending</div>
+                    </div>
+                    <div class="summary-card transit">
+                        <span class="material-icons summary-card-icon">local_shipping</span>
+                        <div class="summary-card-value">3</div>
+                        <div class="summary-card-label">In Transit</div>
+                    </div>
+                    <div class="summary-card delivered">
+                        <span class="material-icons summary-card-icon">check_circle</span>
+                        <div class="summary-card-value">12</div>
+                        <div class="summary-card-label">Delivered</div>
+                    </div>
+                    <div class="summary-card today">
+                        <span class="material-icons summary-card-icon">today</span>
+                        <div class="summary-card-value">8</div>
+                        <div class="summary-card-label">Today</div>
+                    </div>
+                </div>
+                
+                <!-- Tab Navigation (NEW) -->
+                <div class="tab-bar">
+                    <div class="tab active">
+                        All
+                        <div class="tab-count">20</div>
+                    </div>
+                    <div class="tab">
+                        Pending
+                        <div class="tab-count">5</div>
+                    </div>
+                    <div class="tab">
+                        Transit
+                        <div class="tab-count">3</div>
+                    </div>
+                    <div class="tab">
+                        Done
+                        <div class="tab-count">12</div>
+                    </div>
+                </div>
+                
+                <!-- Parcel Cards (NEW) -->
+                <div class="parcel-list">
+                    <div class="parcel-card pending">
+                        <div class="parcel-header">
+                            <div>
+                                <div class="parcel-id">TLP-251125-ADM-0001</div>
+                                <div class="parcel-date">Today, 10:30 AM</div>
+                            </div>
+                            <span class="parcel-status pending">Pending</span>
+                        </div>
+                        <div class="parcel-route">
+                            <span class="route-dot"></span>
+                            <span>Nairobi</span>
+                            <span class="route-line"></span>
+                            <span>Mombasa</span>
+                            <span class="route-dot" style="background:#4caf50"></span>
+                        </div>
+                        <div class="parcel-details">
+                            <div class="parcel-detail">
+                                <span class="material-icons">person</span>
+                                John Kamau
+                            </div>
+                            <div class="parcel-detail">
+                                <span class="material-icons">payments</span>
+                                KES 500
+                            </div>
+                        </div>
+                        <div class="parcel-actions">
+                            <button class="action-btn secondary">
+                                <span class="material-icons">edit</span>
+                                Edit
+                            </button>
+                            <button class="action-btn primary">
+                                <span class="material-icons">local_shipping</span>
+                                Dispatch
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="parcel-card transit">
+                        <div class="parcel-header">
+                            <div>
+                                <div class="parcel-id">TLP-251124-USR-0003</div>
+                                <div class="parcel-date">Yesterday</div>
+                            </div>
+                            <span class="parcel-status transit">In Transit</span>
+                        </div>
+                        <div class="parcel-route">
+                            <span class="route-dot"></span>
+                            <span>Kisumu</span>
+                            <span class="route-line"></span>
+                            <span>Eldoret</span>
+                            <span class="route-dot" style="background:#4caf50"></span>
+                        </div>
+                        <div class="parcel-details">
+                            <div class="parcel-detail">
+                                <span class="material-icons">person</span>
+                                Mary Wanjiku
+                            </div>
+                            <div class="parcel-detail">
+                                <span class="material-icons">directions_bus</span>
+                                KBZ 123A
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="fab">
+                    <span class="material-icons">add</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <h2>🎯 Key Improvements</h2>
+    
+    <div class="features-list">
+        <div class="feature">
+            <div class="feature-icon">
+                <span class="material-icons">dashboard</span>
+            </div>
+            <div class="feature-text">
+                <h4>Summary Cards</h4>
+                <p>At-a-glance stats showing pending, in-transit, delivered counts and today's activity</p>
+            </div>
+        </div>
+        
+        <div class="feature">
+            <div class="feature-icon">
+                <span class="material-icons">tab</span>
+            </div>
+            <div class="feature-text">
+                <h4>Tab Navigation</h4>
+                <p>Quick horizontal tabs to filter by status - faster than vertical stepper</p>
+            </div>
+        </div>
+        
+        <div class="feature">
+            <div class="feature-icon">
+                <span class="material-icons">credit_card</span>
+            </div>
+            <div class="feature-text">
+                <h4>Rich Parcel Cards</h4>
+                <p>More info visible: route visualization, sender/receiver, amount, quick actions</p>
+            </div>
+        </div>
+        
+        <div class="feature">
+            <div class="feature-icon">
+                <span class="material-icons">touch_app</span>
+            </div>
+            <div class="feature-text">
+                <h4>Quick Actions</h4>
+                <p>Edit/Dispatch buttons right on the card - no need to open details first</p>
+            </div>
+        </div>
+        
+        <div class="feature">
+            <div class="feature-icon">
+                <span class="material-icons">route</span>
+            </div>
+            <div class="feature-text">
+                <h4>Visual Route</h4>
+                <p>Clear From → To visualization with dots and gradient line</p>
+            </div>
+        </div>
+        
+        <div class="feature">
+            <div class="feature-icon">
+                <span class="material-icons">palette</span>
+            </div>
+            <div class="feature-text">
+                <h4>Color-Coded Status</h4>
+                <p>Left border color instantly shows parcel status</p>
+            </div>
+        </div>
+    </div>
+    
+    <h2 style="color:#666;font-size:14px;margin-top:60px">
+        Open this file in a browser to see the interactive mockup
+    </h2>
+</body>
+</html>

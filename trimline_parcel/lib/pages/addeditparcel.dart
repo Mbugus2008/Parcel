@@ -5,9 +5,14 @@ import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 
+import '../constants/parcel_form_constants.dart';
 import '../controllers/parcel_controller.dart';
 import '../models/Parcel_Details.dart';
 import '../models/parcel_model.dart';
+import '../services/parcel_draft_service.dart';
+import '../services/parcel_number_service.dart';
+import '../services/parcel_validation_service.dart';
+import '../utils/validation_utils.dart';
 import '../widgets/payment_dialog.dart';
 
 class AddEditParcelPage extends StatefulWidget {
@@ -21,6 +26,10 @@ class AddEditParcelPage extends StatefulWidget {
 class _AddEditParcelPageState extends State<AddEditParcelPage> {
   late final ParcelController controller;
   int _currentStep = 0;
+  bool _isDirty = false; // Track if form has unsaved changes
+  bool _isPopulating =
+      false; // Track if form is being populated (to avoid false dirty state)
+  Timer? _autoSaveTimer; // Periodic auto-save timer
 
   // When a parcel is already dispatched/received/collected we should show the
   // form in view-only mode (no edits allowed).
@@ -55,11 +64,29 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
     controller = Get.find<ParcelController>();
     controller.parcel = widget.parcel;
 
+    debugPrint('🚀 Initializing AddEditParcelPage');
+    if (widget.parcel != null) {
+      debugPrint('   Editing parcel: ${widget.parcel!.Document_No}');
+      debugPrint(
+          '   Initial parcel details count: ${widget.parcel!.parcelDetails.length}');
+    } else {
+      debugPrint('   Creating new parcel');
+    }
+
     // Defer heavy population work to after the first frame to avoid blocking navigation
     if (widget.parcel != null) {
+      _isPopulating = true; // Prevent dirty flag during population
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          controller.PopulateFormWithParcel(widget.parcel!);
+          controller.populateFormWithParcel(widget.parcel!);
+          // Reset dirty flag and population flag after a short delay
+          // to allow all listeners to fire first
+          Future.delayed(const Duration(milliseconds: 100), () {
+            if (mounted) {
+              _isDirty = false;
+              _isPopulating = false;
+            }
+          });
         }
       });
     }
@@ -67,15 +94,15 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
     // Live-update step errors when relevant fields change
     // Reduced listeners to only essential fields to prevent excessive rebuilds
     _fieldsListener = () {
-      if (mounted) {
-        _updateStepErrors();
-        // Debounce rapid state updates (typing) to avoid excessive rebuild work on main thread
-        _debounceTimer?.cancel();
-        _debounceTimer = Timer(const Duration(milliseconds: 300), () {
-          // Increased debounce time
-          if (mounted) setState(() {});
-        });
+      if (!mounted) return;
+      // Only mark as dirty if not during initial population
+      if (!_isPopulating) {
+        _isDirty = true; // Mark form as dirty when any field changes
       }
+      // Removed _updateStepErrors() call here to reduce work during typing
+      // Step errors will be updated when navigating steps or submitting
+      // Removed debounced setState to eliminate rebuilds while typing
+      // This significantly improves keyboard performance
     };
 
     // Only listen to key validation fields, not all fields
@@ -108,12 +135,130 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
         if (mounted) setState(() {});
       }
     });
+
+    // Set up auto-save for new parcels only (not when editing)
+    if (widget.parcel == null) {
+      _loadDraft();
+      _startAutoSave();
+      // Auto-generate parcel number for new parcels
+      _generateParcelNumber();
+    }
+  }
+
+  /// Auto-generate a unique parcel number for new parcels
+  Future<void> _generateParcelNumber() async {
+    try {
+      final parcelNumberService = Get.find<ParcelNumberService>();
+      final parcelNumber = await parcelNumberService.getNextParcelNumber();
+      if (mounted) {
+        controller.documentNoController.text = parcelNumber;
+        debugPrint('📦 Auto-generated parcel number: $parcelNumber');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Failed to generate parcel number: $e');
+      // Fallback: leave blank and let user enter manually or handle later
+    }
+  }
+
+  /// Starts periodic auto-save timer
+  void _startAutoSave() {
+    _autoSaveTimer = Timer.periodic(
+      Duration(seconds: ParcelFormConstants.autoSaveIntervalSeconds),
+      (_) {
+        if (_isDirty && !_isViewOnly && mounted) {
+          _saveDraft();
+        }
+      },
+    );
+  }
+
+  /// Saves current form state as draft
+  Future<void> _saveDraft() async {
+    final formData = {
+      'amountPaid': controller.amountPaidController.text,
+      'from': controller.fromController.text,
+      'to': controller.toController.text,
+      'senderName': controller.senderNameController.text,
+      'senderPhone': controller.senderPhoneController.text,
+      'senderId': controller.senderIdController.text,
+      'receiverName': controller.receiverNameController.text,
+      'receiverPhone': controller.receiverPhoneController.text,
+      'receiverId': controller.receiverIdController.text,
+      'vehicle': controller.vehicleController.text,
+      'driver': controller.driverController.text,
+    };
+
+    await ParcelDraftService.saveDraft(formData);
+  }
+
+  /// Loads draft if available
+  Future<void> _loadDraft() async {
+    final hasDraft = await ParcelDraftService.hasDraft();
+    if (!hasDraft || !mounted) return;
+
+    final timestamp = await ParcelDraftService.getDraftTimestamp();
+    if (timestamp == null) return;
+
+    final age = DateTime.now().difference(timestamp);
+    final ageText = age.inHours > 24
+        ? '${age.inDays} days ago'
+        : age.inHours > 0
+            ? '${age.inHours} hours ago'
+            : '${age.inMinutes} minutes ago';
+
+    // Show dialog asking if user wants to restore draft
+    final shouldRestore = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Draft Found'),
+        content: Text(
+          'A draft from $ageText was found. Would you like to restore it?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              ParcelDraftService.clearDraft();
+              Navigator.of(context).pop(false);
+            },
+            child: const Text('Discard'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Restore'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldRestore == true && mounted) {
+      final formData = await ParcelDraftService.loadDraft();
+      if (formData != null) {
+        controller.amountPaidController.text = formData['amountPaid'] ?? '';
+        controller.fromController.text = formData['from'] ?? '';
+        controller.toController.text = formData['to'] ?? '';
+        controller.senderNameController.text = formData['senderName'] ?? '';
+        controller.senderPhoneController.text = formData['senderPhone'] ?? '';
+        controller.senderIdController.text = formData['senderId'] ?? '';
+        controller.receiverNameController.text = formData['receiverName'] ?? '';
+        controller.receiverPhoneController.text =
+            formData['receiverPhone'] ?? '';
+        controller.receiverIdController.text = formData['receiverId'] ?? '';
+        controller.vehicleController.text = formData['vehicle'] ?? '';
+        controller.driverController.text = formData['driver'] ?? '';
+
+        _isDirty = false; // Reset dirty flag after restore
+        if (mounted) setState(() {});
+      }
+    }
   }
 
   @override
   void dispose() {
-    // Cancel timer
+    // Cancel timers and nullify to prevent race conditions
     _debounceTimer?.cancel();
+    _debounceTimer = null;
+    _autoSaveTimer?.cancel();
+    _autoSaveTimer = null;
 
     // Remove listeners
     try {
@@ -168,247 +313,328 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
     final theme = Theme.of(context);
     final isEditing = widget.parcel != null;
     final steps = _buildSteps(context);
-    return Scaffold(
-      // Prevent the scaffold from resizing when the keyboard appears. This
-      // disables the default keyboard-driven animation/resize behavior so the
-      // page layout remains stable while the onscreen keyboard is shown.
-      resizeToAvoidBottomInset: false,
-      backgroundColor: Colors.transparent,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        titleSpacing: 1,
-        toolbarHeight: 50,
-        iconTheme: const IconThemeData(color: Colors.black),
-        foregroundColor: Colors.black,
-        title: Padding(
-          padding: const EdgeInsets.fromLTRB(0, 8, 16, 8),
-          child: _buildSummaryBar(theme),
-        ),
-        actions: [],
-      ),
-      body: Container(
-        decoration: const BoxDecoration(color: Colors.white),
-        child: SafeArea(
-          child: Column(
-            children: [
-              Expanded(
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    return SizedBox(
-                      height: constraints.maxHeight,
-                      child: Form(
-                        key: controller.formKey,
-                        child: SingleChildScrollView(
-                          physics: const BouncingScrollPhysics(),
-                          child: ConstrainedBox(
-                            constraints: BoxConstraints(
-                              minHeight: constraints.maxHeight,
-                            ),
-                            child: Container(
-                              margin: const EdgeInsets.all(2),
-                              padding: const EdgeInsets.all(2),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(5),
-                                // 💙 blueish border
-                                border: Border.all(
-                                  color: Colors.blueAccent.withOpacity(0.6),
-                                  width: 1.5,
-                                ),
-                                // soft shadow for "floating" effect
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.blueAccent.withOpacity(0.15),
-                                    blurRadius: 12,
-                                    spreadRadius: 2,
-                                    offset: const Offset(0, 6),
-                                  ),
-                                ],
-                              ),
-                              child: Stepper(
-                                type: StepperType.vertical,
-                                currentStep: _currentStep,
-                                steps: steps,
-                                onStepContinue: () {
-                                  final isLastStep =
-                                      _currentStep == steps.length - 1;
-                                  if (isLastStep) {
-                                    // Validate all steps using the step error aggregator
-                                    _updateStepErrors();
-                                    setState(() {});
-                                    final errors = [
-                                      controller.parcelinformationError.value,
-                                      controller.senderinformationError.value,
-                                      controller.receiverinformationError.value,
-                                      controller.deliveryinformationError.value,
-                                    ];
-                                    final firstError = errors.indexWhere(
-                                      (e) => e.isNotEmpty,
-                                    );
-                                    if (firstError != -1) {
-                                      setState(() => _currentStep = firstError);
-                                      Get.snackbar(
-                                        'Validation',
-                                        errors[firstError],
-                                        snackPosition: SnackPosition.BOTTOM,
-                                        backgroundColor:
-                                            Colors.redAccent.withOpacity(0.9),
-                                        colorText: Colors.white,
-                                      );
-                                      return;
-                                    }
+    return PopScope(
+      canPop: !_isDirty || _isViewOnly,
+      onPopInvoked: (bool didPop) async {
+        if (didPop) return;
 
-                                    _submitForm();
-                                  } else {
-                                    // Update step errors and prevent advancing if the current step has an error
-                                    _updateStepErrors();
-                                    setState(() {});
-                                    final stepErrors = [
-                                      controller.parcelinformationError.value,
-                                      controller.senderinformationError.value,
-                                      controller.receiverinformationError.value,
-                                      controller.deliveryinformationError.value,
-                                      '',
-                                    ];
-                                    if (stepErrors[_currentStep].isNotEmpty) {
-                                      Get.snackbar(
-                                        'Validation',
-                                        stepErrors[_currentStep],
-                                        snackPosition: SnackPosition.BOTTOM,
-                                        backgroundColor:
-                                            Colors.redAccent.withOpacity(0.9),
-                                        colorText: Colors.white,
-                                      );
-                                      return;
-                                    }
-                                    setState(() => _currentStep += 1);
-                                  }
-                                },
-                                onStepCancel: () {
-                                  if (_currentStep > 0)
-                                    setState(() => _currentStep -= 1);
-                                },
-                                onStepTapped: (index) =>
-                                    setState(() => _currentStep = index),
-                                controlsBuilder: (context, details) {
-                                  return const SizedBox.shrink();
-                                },
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
+        // Show confirmation dialog if form is dirty
+        final shouldPop = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Discard Changes?'),
+            content: const Text(
+              'You have unsaved changes. Are you sure you want to leave without saving?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
               ),
-              Container(
-                // Keep footer visible above the keyboard by adding viewInsets.bottom
-                // We limit this to the footer only to avoid large-scale layout animations
-                padding: EdgeInsets.fromLTRB(
-                    16, 16, 16, 16 + MediaQuery.of(context).viewInsets.bottom),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  border: Border(
-                    top: BorderSide(color: Colors.grey.shade200, width: 1),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: _isViewOnly
-                            ? null
-                            : () {
-                                // Update step errors so subtitles reflect validation state
-                                _updateStepErrors();
-                                setState(() {});
-
-                                // Check aggregated step errors instead of running full form validation
-                                final errors = [
-                                  controller.parcelinformationError.value,
-                                  controller.senderinformationError.value,
-                                  controller.receiverinformationError.value,
-                                  controller.deliveryinformationError.value,
-                                ];
-                                final firstErrorIndex = errors.indexWhere(
-                                  (e) => e.isNotEmpty,
-                                );
-                                if (firstErrorIndex != -1) {
-                                  setState(
-                                      () => _currentStep = firstErrorIndex);
-                                  Get.snackbar(
-                                    'Validation',
-                                    'Please fix the highlighted field.',
-                                    snackPosition: SnackPosition.BOTTOM,
-                                    backgroundColor:
-                                        Colors.redAccent.withOpacity(0.9),
-                                    colorText: Colors.white,
-                                  );
-                                  return;
-                                }
-
-                                // No step errors — proceed to submit
-                                _submitForm();
-                              },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF4FB5FF),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 12,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child:
-                            Text(isEditing ? 'Update Parcel' : 'Save Parcel'),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: _isViewOnly
-                            ? null
-                            : () async {
-                                if (widget.parcel != null) {
-                                  // Open the reusable payment dialog
-                                  await showPaymentDialog(
-                                      context, widget.parcel!);
-                                } else {
-                                  Get.snackbar(
-                                    'Save First',
-                                    'Please save the parcel first before making a payment.',
-                                    snackPosition: SnackPosition.BOTTOM,
-                                    backgroundColor:
-                                        Colors.orangeAccent.withOpacity(0.9),
-                                    colorText: Colors.white,
-                                  );
-                                }
-                              },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 12,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: const Text('Pay'),
-                      ),
-                    ),
-                  ],
-                ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                style: TextButton.styleFrom(foregroundColor: Colors.red),
+                child: const Text('Discard'),
               ),
             ],
           ),
+        );
+
+        if (shouldPop == true && context.mounted) {
+          Navigator.of(context).pop();
+        }
+      },
+      child: Scaffold(
+        // Prevent the scaffold from resizing when the keyboard appears. This
+        // disables the default keyboard-driven animation/resize behavior so the
+        // page layout remains stable while the onscreen keyboard is shown.
+        resizeToAvoidBottomInset: false,
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          titleSpacing: 1,
+          toolbarHeight: 50,
+          iconTheme: const IconThemeData(color: Colors.black),
+          foregroundColor: Colors.black,
+          title: Padding(
+            padding: const EdgeInsets.fromLTRB(0, 8, 16, 8),
+            child: _buildSummaryBar(theme),
+          ),
+          actions: [],
         ),
-      ),
+        body: Container(
+          decoration: const BoxDecoration(color: Colors.white),
+          child: SafeArea(
+            child: Column(
+              children: [
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      return SizedBox(
+                        height: constraints.maxHeight,
+                        child: Form(
+                          key: controller.formKey,
+                          child: SingleChildScrollView(
+                            physics: const BouncingScrollPhysics(),
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(
+                                minHeight: constraints.maxHeight,
+                              ),
+                              child: Container(
+                                margin: const EdgeInsets.all(2),
+                                padding: const EdgeInsets.all(2),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(5),
+                                  // 💙 blueish border
+                                  border: Border.all(
+                                    color: Colors.blueAccent.withOpacity(0.6),
+                                    width: 1.5,
+                                  ),
+                                  // soft shadow for "floating" effect
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color:
+                                          Colors.blueAccent.withOpacity(0.15),
+                                      blurRadius: 12,
+                                      spreadRadius: 2,
+                                      offset: const Offset(0, 6),
+                                    ),
+                                  ],
+                                ),
+                                child: Semantics(
+                                  label: ParcelFormConstants
+                                      .formAccessibilityLabel,
+                                  child: Stepper(
+                                    type: StepperType.vertical,
+                                    currentStep: _currentStep,
+                                    steps: steps,
+                                    onStepContinue: () {
+                                      final isLastStep =
+                                          _currentStep == steps.length - 1;
+                                      if (isLastStep) {
+                                        // Validate all steps using the step error aggregator
+                                        _updateStepErrors();
+                                        setState(() {});
+                                        final errors = [
+                                          controller
+                                              .parcelinformationError.value,
+                                          controller
+                                              .senderinformationError.value,
+                                          controller
+                                              .receiverinformationError.value,
+                                          controller
+                                              .deliveryinformationError.value,
+                                        ];
+                                        final firstError = errors.indexWhere(
+                                          (e) => e.isNotEmpty,
+                                        );
+                                        if (firstError != -1) {
+                                          setState(
+                                              () => _currentStep = firstError);
+                                          Get.snackbar(
+                                            'Validation',
+                                            errors[firstError],
+                                            snackPosition: SnackPosition.BOTTOM,
+                                            backgroundColor: Colors.redAccent
+                                                .withOpacity(0.9),
+                                            colorText: Colors.white,
+                                          );
+                                          return;
+                                        }
+
+                                        _submitForm();
+                                      } else {
+                                        // Update step errors and prevent advancing if the current step has an error
+                                        _updateStepErrors();
+                                        setState(() {});
+                                        final stepErrors = [
+                                          controller
+                                              .parcelinformationError.value,
+                                          controller
+                                              .senderinformationError.value,
+                                          controller
+                                              .receiverinformationError.value,
+                                          controller
+                                              .deliveryinformationError.value,
+                                          '',
+                                        ];
+                                        if (stepErrors[_currentStep]
+                                            .isNotEmpty) {
+                                          Get.snackbar(
+                                            'Validation',
+                                            stepErrors[_currentStep],
+                                            snackPosition: SnackPosition.BOTTOM,
+                                            backgroundColor: Colors.redAccent
+                                                .withOpacity(0.9),
+                                            colorText: Colors.white,
+                                          );
+                                          return;
+                                        }
+                                        setState(() => _currentStep += 1);
+                                      }
+                                    },
+                                    onStepCancel: () {
+                                      if (_currentStep > 0) {
+                                        setState(() => _currentStep -= 1);
+                                      }
+                                    },
+                                    onStepTapped: (index) =>
+                                        setState(() => _currentStep = index),
+                                    controlsBuilder: (context, details) {
+                                      return const SizedBox.shrink();
+                                    },
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                Container(
+                  // Fixed padding to prevent animation when keyboard appears/disappears
+                  // This significantly improves keyboard performance by avoiding layout recalculations
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    border: Border(
+                      top: BorderSide(color: Colors.grey.shade200, width: 1),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Obx(
+                          () => Semantics(
+                            button: true,
+                            enabled: !_isViewOnly && !controller.isSavingParcel,
+                            hint: controller.isSavingParcel
+                                ? ParcelFormConstants.savingAccessibilityHint
+                                : null,
+                            child: ElevatedButton(
+                              onPressed: _isViewOnly ||
+                                      controller.isSavingParcel
+                                  ? null
+                                  : () {
+                                      // Update step errors so subtitles reflect validation state
+                                      _updateStepErrors();
+                                      setState(() {});
+
+                                      // Check aggregated step errors instead of running full form validation
+                                      final errors = [
+                                        controller.parcelinformationError.value,
+                                        controller.senderinformationError.value,
+                                        controller
+                                            .receiverinformationError.value,
+                                        controller
+                                            .deliveryinformationError.value,
+                                      ];
+                                      final firstErrorIndex = errors.indexWhere(
+                                        (e) => e.isNotEmpty,
+                                      );
+                                      if (firstErrorIndex != -1) {
+                                        setState(() =>
+                                            _currentStep = firstErrorIndex);
+                                        Get.snackbar(
+                                          'Validation',
+                                          'Please fix the highlighted field.',
+                                          snackPosition: SnackPosition.BOTTOM,
+                                          backgroundColor:
+                                              Colors.redAccent.withOpacity(0.9),
+                                          colorText: Colors.white,
+                                        );
+                                        return;
+                                      }
+
+                                      // No step errors — proceed to submit
+                                      _submitForm();
+                                    },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(
+                                    ParcelFormConstants.primaryColorValue),
+                                foregroundColor: Colors.white,
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: ParcelFormConstants
+                                      .buttonHorizontalPadding,
+                                  vertical:
+                                      ParcelFormConstants.buttonVerticalPadding,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(
+                                      ParcelFormConstants.borderRadius),
+                                ),
+                              ),
+                              child: controller.isSavingParcel
+                                  ? SizedBox(
+                                      height: ParcelFormConstants
+                                          .loadingIndicatorSize,
+                                      width: ParcelFormConstants
+                                          .loadingIndicatorSize,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: ParcelFormConstants
+                                            .loadingIndicatorStrokeWidth,
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                                Colors.white),
+                                      ),
+                                    )
+                                  : Text(isEditing
+                                      ? 'Update Parcel'
+                                      : 'Save Parcel'),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: _isViewOnly
+                              ? null
+                              : () async {
+                                  if (widget.parcel != null) {
+                                    // Open the reusable payment dialog
+                                    await showPaymentDialog(
+                                        context, widget.parcel!);
+                                  } else {
+                                    Get.snackbar(
+                                      'Save First',
+                                      'Please save the parcel first before making a payment.',
+                                      snackPosition: SnackPosition.BOTTOM,
+                                      backgroundColor:
+                                          Colors.orangeAccent.withOpacity(0.9),
+                                      colorText: Colors.white,
+                                    );
+                                  }
+                                },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                            foregroundColor: Colors.white,
+                            padding: EdgeInsets.symmetric(
+                              horizontal:
+                                  ParcelFormConstants.buttonHorizontalPadding,
+                              vertical:
+                                  ParcelFormConstants.buttonVerticalPadding,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(
+                                  ParcelFormConstants.borderRadius),
+                            ),
+                          ),
+                          child: const Text('Pay'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ), // Close PopScope
     );
   }
 
@@ -485,9 +711,26 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
             IconButton(
               icon: const Icon(Icons.add_circle_outline, color: Colors.black),
               tooltip: 'Add item',
-              onPressed: () {
+              onPressed: () async {
+                // Navigate to Items step (step 3) if not already there
+                if (_currentStep != 3) {
+                  setState(() => _currentStep = 3);
+                  // Removed animation delay to improve performance
+                }
+
+                // Add item and immediately open edit dialog
                 controller.addParcelDetail();
-                setState(() {});
+                final newIndex =
+                    (controller.parcel?.parcelDetails.length ?? 1) - 1;
+                if (newIndex >= 0 && mounted) {
+                  await _showEditParcelDetailDialog(
+                    context,
+                    controller.parcel!.parcelDetails[newIndex],
+                    newIndex,
+                  );
+                  // Trigger UI update after dialog closes
+                  if (mounted) setState(() {});
+                }
               },
             ),
           ],
@@ -646,6 +889,7 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
           focusNode: amountPaidFocusNode,
           nextFocus: fromFocusNode,
           decoration: const InputDecoration(prefixText: 'Ksh '),
+          helperText: ParcelFormConstants.amountHintText,
           error: controller.amountPaidError,
         ),
         const SizedBox(height: 16),
@@ -706,16 +950,21 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
             readOnly: _isViewOnly,
             focusNode: senderPhoneFocusNode,
             nextFocus: senderIdFocusNode,
+            keyboardType: TextInputType.phone,
+            customValidator: ValidationUtils.validateKenyanPhone,
+            helperText: ParcelFormConstants.phoneHintText,
             onNextStep: () {
               // move to Sender ID
-              if (_currentStep == 1)
+              if (_currentStep == 1) {
                 FocusScope.of(context).requestFocus(senderIdFocusNode);
+              }
             },
           ),
           _buildTextField(
             controller: controller.senderIdController,
             label: 'Sender ID / Passport',
             prefixIcon: Icons.credit_card,
+            helperText: ParcelFormConstants.idHintText,
             readOnly: _isViewOnly,
             focusNode: senderIdFocusNode,
             nextFocus: receiverNameFocusNode,
@@ -752,11 +1001,13 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
             readOnly: _isViewOnly,
             focusNode: receiverPhoneFocusNode,
             nextFocus: receiverIdFocusNode,
+            keyboardType: TextInputType.phone,
+            customValidator: ValidationUtils.validateKenyanPhone,
+            helperText: ParcelFormConstants.phoneHintText,
             onNextStep: () {
               // After receiver phone, advance to Delivery step
               if (_currentStep == 2) setState(() => _currentStep = 3);
             },
-            keyboardType: TextInputType.phone,
             error: controller.receiverPhoneFieldError,
           ),
           _buildTextField(
@@ -766,6 +1017,7 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
             readOnly: _isViewOnly,
             focusNode: receiverIdFocusNode,
             nextFocus: vehicleFocusNode,
+            helperText: ParcelFormConstants.idHintText,
           ),
         ]),
       ],
@@ -777,6 +1029,7 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
 
   Widget _buildDetailsSection(BuildContext context) {
     final details = controller.parcel?.parcelDetails ?? <Parcel_Details>[];
+    debugPrint('🎨 Building details section: ${details.length} items');
 
     return _buildSectionCard(
       context,
@@ -786,9 +1039,20 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
       trailing: IconButton(
         onPressed: _isViewOnly
             ? null
-            : () {
+            : () async {
+                // Add item and immediately open edit dialog
                 controller.addParcelDetail();
-                setState(() {});
+                final newIndex =
+                    (controller.parcel?.parcelDetails.length ?? 1) - 1;
+                if (newIndex >= 0) {
+                  await _showEditParcelDetailDialog(
+                    context,
+                    controller.parcel!.parcelDetails[newIndex],
+                    newIndex,
+                  );
+                  // Trigger UI update after dialog closes
+                  if (mounted) setState(() {});
+                }
               },
         icon: const Icon(Icons.add_circle_outline, color: Colors.black),
       ),
@@ -941,6 +1205,8 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
     FocusNode? focusNode,
     VoidCallback? onNextStep,
     FocusNode? nextFocus,
+    String? Function(String?)? customValidator,
+    String? helperText,
   }) {
     final bool showError = (error?.value.isNotEmpty ?? false);
     final baseBorder = OutlineInputBorder(
@@ -984,6 +1250,11 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
                 color: Colors.redAccent,
               )
             : decoration?.suffixIcon,
+        helperText: helperText,
+        helperStyle: const TextStyle(
+          color: Colors.black54,
+          fontSize: 12,
+        ),
         enabledBorder: baseBorder,
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(18),
@@ -1009,17 +1280,18 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
         // If caller wants to advance to the next step (end of a step fields)
         if (onNextStep != null) onNextStep();
       },
-      validator: isRequired
-          ? (value) {
-              // keep validator backing the field-specific RxString but avoid coloring other fields
-              error?.value = '';
-              if (value == null || value.isEmpty) {
-                error?.value = ' field is required';
-                return error?.value;
-              }
-              return null;
-            }
-          : null,
+      validator: customValidator ??
+          (isRequired
+              ? (value) {
+                  // keep validator backing the field-specific RxString but avoid coloring other fields
+                  error?.value = '';
+                  if (value == null || value.isEmpty) {
+                    error?.value = ' field is required';
+                    return error?.value;
+                  }
+                  return null;
+                }
+              : null),
     );
   }
 
@@ -1073,90 +1345,58 @@ class _AddEditParcelPageState extends State<AddEditParcelPage> {
         parcelDetails: controller.parcel?.parcelDetails,
       );
 
-      if (controller.parcel != null) {
-        controller.updateParcel(parcel);
-        _showSnackBar('Success', 'Parcel updated successfully!');
+      bool success;
+      // Use widget.parcel to determine if this is a new parcel or editing existing
+      // controller.parcel gets set when adding details, so we can't rely on it
+      if (widget.parcel != null) {
+        success = await controller.updateParcel(parcel);
+        // Controller already shows success message, no need to duplicate
       } else {
-        controller.addParcel(parcel);
-        _showSnackBar('Success', 'Parcel added successfully!');
-        controller.formKey.currentState?.reset();
+        success = await controller.addParcel(parcel);
+        // Controller already shows success message, no need to duplicate
       }
 
-      await Future.delayed(const Duration(seconds: 1));
-      Get.back();
+      // Only navigate back if save was successful
+      if (success) {
+        // Clear dirty flag and update UI so PopScope allows navigation
+        setState(() {
+          _isDirty = false;
+        });
+        // Clear draft on successful save (only for new parcels)
+        if (widget.parcel == null) {
+          await ParcelDraftService.clearDraft();
+        }
+        await Future.delayed(const Duration(seconds: 1));
+        Get.back();
+      }
+      // If failed, stay on screen so user can retry
     } catch (e) {
       _showSnackBar(
         'Error',
         'Failed to save parcel: $e',
         backgroundColor: Colors.red,
       );
+      // Stay on screen to allow retry
     }
   }
 
   void _updateStepErrors() {
-    // Clear field-specific errors first
-    controller.amountPaidError.value = '';
-    controller.fromError.value = '';
-    controller.toError.value = '';
-    controller.senderNameFieldError.value = '';
-    controller.receiverNameFieldError.value = '';
-    controller.receiverPhoneFieldError.value = '';
-    controller.vehicleFieldError.value = '';
-    controller.driverFieldError.value = '';
+    // Use centralized validation service
+    final validations = ParcelValidationService.validateAllSteps(controller);
 
-    // Parcel step (both field errors and step-level summary)
+    // Clear all error fields first
     controller.parcelinformationError.value = '';
-    if (controller.amountPaidController.text.trim().isEmpty) {
-      controller.amountPaidError.value = 'Amount Paid is required';
-      controller.parcelinformationError.value =
-          controller.amountPaidError.value;
-    } else if (controller.fromController.text.trim().isEmpty) {
-      controller.fromError.value = 'From location is required';
-      controller.parcelinformationError.value = controller.fromError.value;
-    } else if (controller.toController.text.trim().isEmpty) {
-      controller.toError.value = 'Destination is required';
-      controller.parcelinformationError.value = controller.toError.value;
-    } else {
-      controller.parcelinformationError.value = '';
-    }
-
-    // Sender step
     controller.senderinformationError.value = '';
-    if (controller.senderNameController.text.trim().isEmpty) {
-      controller.senderNameFieldError.value = 'Sender name is required';
-      controller.senderinformationError.value =
-          controller.senderNameFieldError.value;
-    }
-
-    // Receiver step
     controller.receiverinformationError.value = '';
-    if (controller.receiverNameController.text.trim().isEmpty) {
-      controller.receiverNameFieldError.value = 'Receiver name is required';
-      controller.receiverinformationError.value =
-          controller.receiverNameFieldError.value;
-    } else if (controller.receiverPhoneController.text.trim().isEmpty) {
-      controller.receiverPhoneFieldError.value = 'Receiver phone is required';
-      controller.receiverinformationError.value =
-          controller.receiverPhoneFieldError.value;
-    }
-
-    // Delivery step
-    controller.deliveryinformationError.value = '';
-    if (controller.vehicleController.text.trim().isEmpty) {
-      controller.vehicleFieldError.value = 'Vehicle registration is required';
-      controller.deliveryinformationError.value =
-          controller.vehicleFieldError.value;
-    } else if (controller.driverController.text.trim().isEmpty) {
-      controller.driverFieldError.value = 'Driver name is required';
-      controller.deliveryinformationError.value =
-          controller.driverFieldError.value;
-    }
-
-    // Items step: ensure at least one item exists
     controller.itemsError.value = '';
-    final items = controller.parcel?.parcelDetails ?? <dynamic>[];
-    if (items.isEmpty) {
-      controller.itemsError.value = 'At least one item is required';
+
+    // Apply validation results to controller
+    for (var i = 0; i < validations.length; i++) {
+      final validation = validations[i];
+      if (!validation.isValid) {
+        ParcelValidationService.updateControllerErrors(controller, validation);
+        break; // Stop at first error to avoid overwriting
+      }
     }
   }
 }
@@ -1168,11 +1408,10 @@ class _EditParcelDetailDialog extends StatefulWidget {
   final ParcelController parcelController;
 
   const _EditParcelDetailDialog({
-    Key? key,
     required this.parcelDetail,
     required this.index,
     required this.parcelController,
-  }) : super(key: key);
+  });
 
   @override
   State<_EditParcelDetailDialog> createState() =>
@@ -1328,12 +1567,18 @@ class _EditParcelDetailDialogState extends State<_EditParcelDetailDialog> {
                           keyboardType: const TextInputType.numberWithOptions(
                               decimal: true),
                           inputFormatters: [
-                            FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))
+                            // Allow digits and optional single decimal point with max 2 decimal places
+                            FilteringTextInputFormatter.allow(
+                                RegExp(r'^\d*\.?\d{0,2}'))
                           ],
                           validator: (v) {
                             final val = double.tryParse(v ?? '');
-                            if (val == null || val <= 0)
+                            if (val == null || val <= 0) {
                               return 'Enter a valid amount';
+                            }
+                            if (val > 1000000) {
+                              return 'Amount seems too large. Please verify.';
+                            }
                             return null;
                           },
                           onChanged: (_) => setState(() {}),

@@ -17,7 +17,7 @@ Future<void> showPaymentDialog(BuildContext context, Parcel parcel) async {
           : parcel.Receiver_Phone ?? '');
   String? selectedMethod;
 
-  Future<String?> _generateQrCode(String amount, String refNo) async {
+  Future<String?> generateQrCode(String amount, String refNo) async {
     try {
       final response = await http.post(
         Uri.parse(
@@ -39,7 +39,7 @@ Future<void> showPaymentDialog(BuildContext context, Parcel parcel) async {
         throw Exception('Failed to generate QR');
       }
     } catch (e) {
-      throw e;
+      rethrow;
     }
   }
 
@@ -139,7 +139,7 @@ Future<void> showPaymentDialog(BuildContext context, Parcel parcel) async {
                         selectedMethod = value;
                         if (value == 'scan') {
                           isLoadingQr = true;
-                          _generateQrCode(amountController.text,
+                          generateQrCode(amountController.text,
                                   parcel.Document_No ?? 'Unknown')
                               .then((code) {
                             setState(() {

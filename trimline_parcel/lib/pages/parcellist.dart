@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+
+import '../controllers/parcel_controller.dart';
+import '../models/parcel_model.dart';
 import '../pages/addeditparcel.dart';
 import '../pages/parcel_dashboard_page.dart';
 import '../pages/parcel_date_filter_page.dart';
 import '../pages/send.dart';
 import '../widgets/parcel_card.dart';
-import '../controllers/parcel_controller.dart';
-import '../models/parcel_model.dart';
-
 
 class ParcelListPage extends StatefulWidget {
-  const ParcelListPage({Key? key}) : super(key: key);
+  const ParcelListPage({super.key});
 
   @override
   _ParcelListPageState createState() => _ParcelListPageState();
@@ -102,10 +102,9 @@ class _ParcelListPageState extends State<ParcelListPage> {
           Obx(
             () => IconButton(
               icon: const Icon(Icons.refresh),
-              onPressed:
-                  _parcelController.isLoadingRx.value
-                      ? null
-                      : _parcelController.loadParcels,
+              onPressed: _parcelController.isLoadingRx.value
+                  ? null
+                  : _parcelController.loadParcels,
             ),
           ),
         ],
@@ -117,9 +116,8 @@ class _ParcelListPageState extends State<ParcelListPage> {
             child: Card(
               color: Colors.blue,
               margin: const EdgeInsets.all(8.0),
-
               child: TextButton(
-                onPressed: () => Get.to(() => Send()),
+                onPressed: () => Get.to(() => const SendParcelPage()),
                 child: const Text(
                   'Send Parcel',
                   style: TextStyle(color: Colors.white, fontSize: 24),
@@ -127,7 +125,6 @@ class _ParcelListPageState extends State<ParcelListPage> {
               ),
             ),
           ),
-
           SizedBox(
             width: double.infinity,
             child: Card(
@@ -142,7 +139,6 @@ class _ParcelListPageState extends State<ParcelListPage> {
               ),
             ),
           ),
-
           Padding(
             padding: const EdgeInsets.all(1.0),
             child: TextField(
@@ -158,7 +154,6 @@ class _ParcelListPageState extends State<ParcelListPage> {
               ),
             ),
           ),
-
           Obx(() {
             if (_parcelController.isLoadingRx.value) {
               return const Expanded(
@@ -210,6 +205,3 @@ class _ParcelListPageState extends State<ParcelListPage> {
     );
   }
 }
-
-
-
