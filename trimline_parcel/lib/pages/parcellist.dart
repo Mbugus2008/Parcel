@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:trimline_parcel/pages/addeditparcel.dart';
-import 'package:trimline_parcel/pages/send.dart';
-import 'package:trimline_parcel/pages/parcel_dashboard_page.dart';
-import 'package:trimline_parcel/widgets/parcel_card.dart';
-import '../models/parcel_model.dart';
-import '../controllers/parcel_controller.dart';
 
+import '../controllers/parcel_controller.dart';
+import '../models/parcel_model.dart';
+import '../pages/addeditparcel.dart';
+import '../pages/parcel_dashboard_page.dart';
+import '../pages/parcel_date_filter_page.dart';
+import '../pages/send.dart';
+import '../widgets/parcel_card.dart';
 
 class ParcelListPage extends StatefulWidget {
-  const ParcelListPage({Key? key}) : super(key: key);
+  const ParcelListPage({super.key});
 
   @override
   _ParcelListPageState createState() => _ParcelListPageState();
@@ -91,16 +92,19 @@ class _ParcelListPageState extends State<ParcelListPage> {
             onPressed: () => Get.to(() => const ParcelDashboardPage()),
           ),
           IconButton(
+            icon: const Icon(Icons.calendar_month),
+            onPressed: () => Get.to(() => const ParcelDateFilterPage()),
+          ),
+          IconButton(
             icon: const Icon(Icons.filter_alt),
             onPressed: _showStatusFilterDialog,
           ),
           Obx(
             () => IconButton(
               icon: const Icon(Icons.refresh),
-              onPressed:
-                  _parcelController.isLoading
-                      ? null
-                      : _parcelController.loadParcels,
+              onPressed: _parcelController.isLoadingRx.value
+                  ? null
+                  : _parcelController.loadParcels,
             ),
           ),
         ],
@@ -112,9 +116,8 @@ class _ParcelListPageState extends State<ParcelListPage> {
             child: Card(
               color: Colors.blue,
               margin: const EdgeInsets.all(8.0),
-
               child: TextButton(
-                onPressed: () => Get.to(() => Send()),
+                onPressed: () => Get.to(() => const SendParcelPage()),
                 child: const Text(
                   'Send Parcel',
                   style: TextStyle(color: Colors.white, fontSize: 24),
@@ -122,7 +125,6 @@ class _ParcelListPageState extends State<ParcelListPage> {
               ),
             ),
           ),
-
           SizedBox(
             width: double.infinity,
             child: Card(
@@ -137,7 +139,6 @@ class _ParcelListPageState extends State<ParcelListPage> {
               ),
             ),
           ),
-
           Padding(
             padding: const EdgeInsets.all(1.0),
             child: TextField(
@@ -153,15 +154,14 @@ class _ParcelListPageState extends State<ParcelListPage> {
               ),
             ),
           ),
-
           Obx(() {
-            if (_parcelController.isLoading) {
+            if (_parcelController.isLoadingRx.value) {
               return const Expanded(
                 child: Center(child: CircularProgressIndicator()),
               );
             }
 
-            if (_parcelController.filteredParcels.isEmpty) {
+            if (_parcelController.filteredParcelsRx.isEmpty) {
               return const Expanded(
                 child: Center(child: Text('No parcels found')),
               );
@@ -169,9 +169,9 @@ class _ParcelListPageState extends State<ParcelListPage> {
 
             return Expanded(
               child: ListView.builder(
-                itemCount: _parcelController.filteredParcels.length,
+                itemCount: _parcelController.filteredParcelsRx.length,
                 itemBuilder: (context, index) {
-                  final parcel = _parcelController.filteredParcels[index];
+                  final parcel = _parcelController.filteredParcelsRx[index];
                   return Card(
                     margin: const EdgeInsets.symmetric(
                       horizontal: 8,
@@ -205,6 +205,3 @@ class _ParcelListPageState extends State<ParcelListPage> {
     );
   }
 }
-
-
-

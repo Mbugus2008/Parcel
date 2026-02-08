@@ -1,11 +1,66 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:get/get_core/src/get_main.dart';
-import 'package:trimline_parcel/pages/parcel_dashboard_page.dart';
-import 'package:trimline_parcel/pages/parcellist.dart';
 
-class LoginScreen extends StatelessWidget {
+import '../pages/parcel_dashboard_page.dart';
+import '../services/auth_service.dart';
+
+class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
+
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  final TextEditingController _usernameController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  final AuthService _authService = Get.find<AuthService>();
+  bool _rememberMe = false;
+  bool _isLoading = false;
+
+  void _handleLogin() async {
+    final username = _usernameController.text.trim();
+    final password = _passwordController.text.trim();
+
+    if (username.isEmpty || password.isEmpty) {
+      Get.snackbar(
+        'Error',
+        'Please enter both username and password',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    // Use AuthService for login with persistence
+    final success = await _authService.login(
+      username: username,
+      password: password,
+      rememberMe: _rememberMe,
+    );
+
+    setState(() => _isLoading = false);
+
+    if (success) {
+      Get.offAll(() => const ParcelDashboardPage());
+    } else {
+      Get.snackbar(
+        'Login Failed',
+        'Invalid username or password',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _usernameController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -47,10 +102,11 @@ class LoginScreen extends StatelessWidget {
 
               const SizedBox(height: 30),
 
-              // Email
+              // Username
               TextField(
+                controller: _usernameController,
                 decoration: const InputDecoration(
-                  hintText: "Email Address",
+                  hintText: "Username",
                   prefixIcon: Icon(Icons.account_circle),
                 ),
               ),
@@ -59,20 +115,40 @@ class LoginScreen extends StatelessWidget {
 
               // Password
               TextField(
+                controller: _passwordController,
                 obscureText: true,
                 decoration: const InputDecoration(
                   hintText: "Password",
                   prefixIcon: Icon(Icons.lock_outline),
                 ),
+                onSubmitted: (_) => _handleLogin(),
               ),
 
-              const SizedBox(height: 20),
+              const SizedBox(height: 12),
+
+              // Remember Me checkbox
+              Row(
+                children: [
+                  Checkbox(
+                    value: _rememberMe,
+                    onChanged: (value) {
+                      setState(() => _rememberMe = value ?? false);
+                    },
+                  ),
+                  const Text(
+                    'Remember Me',
+                    style: TextStyle(color: Colors.grey, fontSize: 14),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 8),
 
               // Login Button
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: () {Get.to(() => const ParcelDashboardPage());},
+                  onPressed: _isLoading ? null : _handleLogin,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blue,
                     padding: const EdgeInsets.symmetric(vertical: 16),
@@ -80,10 +156,20 @@ class LoginScreen extends StatelessWidget {
                       borderRadius: BorderRadius.circular(16),
                     ),
                   ),
-                  child: const Text(
-                    "Login",
-                    style: TextStyle(fontSize: 18, color: Colors.white),
-                  ),
+                  child: _isLoading
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : const Text(
+                          "Login",
+                          style: TextStyle(fontSize: 18, color: Colors.white),
+                        ),
                 ),
               ),
 

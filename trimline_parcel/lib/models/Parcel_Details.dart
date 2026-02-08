@@ -5,6 +5,7 @@ class Parcel_Details {
   String? Description;
   double? Amount;
   String? Remarks;
+  double? Weight;
 
   Parcel_Details({
     this.Key,
@@ -13,6 +14,7 @@ class Parcel_Details {
     this.Description,
     this.Amount,
     this.Remarks,
+    this.Weight,
   });
 
   // Factory constructor for creating an instance from JSON
@@ -24,6 +26,7 @@ class Parcel_Details {
       Description: json['Description'],
       Amount: json['Amount']?.toDouble(),
       Remarks: json['Remarks'],
+      Weight: json['Weight']?.toDouble(),
     );
   }
 
@@ -36,6 +39,7 @@ class Parcel_Details {
       'Description': Description,
       'Amount': Amount,
       'Remarks': Remarks,
+      'Weight': Weight,
     };
   }
 
@@ -47,6 +51,7 @@ class Parcel_Details {
     String? Description,
     double? Amount,
     String? Remarks,
+    double? Weight,
   }) {
     return Parcel_Details(
       Key: Key ?? this.Key,
@@ -55,35 +60,37 @@ class Parcel_Details {
       Description: Description ?? this.Description,
       Amount: Amount ?? this.Amount,
       Remarks: Remarks ?? this.Remarks,
+      Weight: Weight ?? this.Weight,
     );
   }
 
   @override
   String toString() {
-    return 'Parcel_Details(Key: $Key, Document_No: $Document_No, No_Of_Items: $No_Of_Items, Description: $Description, Amount: $Amount, Remarks: $Remarks)';
+    return 'Parcel_Details(Key: $Key, Document_No: $Document_No, No_Of_Items: $No_Of_Items, Description: $Description, Amount: $Amount, Remarks: $Remarks, Weight: $Weight)';
   }
 
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
-  
+
     return other is Parcel_Details &&
-      other.Key == Key &&
-      other.Document_No == Document_No &&
-      other.No_Of_Items == No_Of_Items &&
-      other.Description == Description &&
-      other.Amount == Amount &&
-      other.Remarks == Remarks;
+        other.Key == Key &&
+        other.Document_No == Document_No &&
+        other.No_Of_Items == No_Of_Items &&
+        other.Description == Description &&
+        other.Amount == Amount &&
+        other.Remarks == Remarks &&
+        other.Weight == Weight;
   }
 
   @override
   int get hashCode {
     return Key.hashCode ^
-      Document_No.hashCode ^
-      No_Of_Items.hashCode ^
-      Description.hashCode ^
-      Amount.hashCode ^
-      Remarks.hashCode;
+        Document_No.hashCode ^
+        No_Of_Items.hashCode ^
+        Description.hashCode ^
+        Amount.hashCode ^
+        Remarks.hashCode ^
+        Weight.hashCode;
   }
 }
-

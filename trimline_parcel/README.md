@@ -14,3 +14,9 @@ A few resources to get you started if this is your first Flutter project:
 For help getting started with Flutter development, view the
 [online documentation](https://docs.flutter.dev/), which offers tutorials,
 samples, guidance on mobile development, and a full API reference.
+
+
+## Branding
+
+A custom parcel-themed application icon lives at assets/parcel_login.png. You can regenerate launcher icons with a tool like flutter_launcher_icons, pointing it at this asset.
+

@@ -1,18 +1,10 @@
-import 'package:trimline_parcel/models/Parcel_Details.dart';
+import './Parcel_Details.dart';
 
-enum WhoToPay {
-  Sender,
-  Receiver,
-}
+enum WhoToPay { Sender, Receiver }
 
 typedef Who_to_Pay = WhoToPay;
 
-enum ParcelStatus {
-  pending,
-  inTransit,
-  received,
-  collected,
-}
+enum ParcelStatus { pending, inTransit, received, collected }
 
 class Parcel {
   String? Document_No;
@@ -37,7 +29,7 @@ class Parcel {
   DateTime? Date_Returned;
   String? Notes;
   List<Parcel_Details> parcelDetails;
-
+  String? Weight;
   Parcel({
     this.Document_No,
     this.Date_sent,
@@ -113,8 +105,11 @@ class Parcel {
       Out_For_Delivery_Time: _parseDate(json['Out_For_Delivery_Time']),
       Date_Returned: _parseDate(json['Date_Returned']),
       Notes: json['Notes'] as String?,
-      parcelDetails: (json['Details'] as List?)
-              ?.map((item) => Parcel_Details.fromJson(item as Map<String, dynamic>))
+      parcelDetails:
+          (json['Details'] as List?)
+              ?.map(
+                (item) => Parcel_Details.fromJson(item as Map<String, dynamic>),
+              )
               .toList() ??
           <Parcel_Details>[],
     );
@@ -256,4 +251,3 @@ class Parcel {
     }
   }
 }
-

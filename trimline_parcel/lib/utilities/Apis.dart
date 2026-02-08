@@ -1,44 +1,39 @@
 // ignore_for_file: public_member_api_docs, sort_constructors_first
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 
-import 'dart:convert';
-
-import 'package:trimline_parcel/utilities/logger.dart';
+import '../core/config/app_config.dart';
+import './logger.dart';
 
 class ApiClient extends ChangeNotifier {
   final LoggerService logger = Get.find();
-  String baseUrl = "http://nav.trimline.co.ke:4010/api/Matatu/";
+
+  /// Get base URL from AppConfig (supports different environments)
+  String get baseUrl => AppConfig().apiBaseUrl;
+
+  /// Get client identifier from AppConfig
+  String get clientIdentifier => AppConfig().clientIdentifier;
 
   Future<http.Response> postdata(String url, String? data) async {
     http.Response? r = http.Response("", 200);
     try {
-      //String urls =          '${Get.find<MainController>().config?.value.apiBaseUrl}$url';
-      String urls =
-          '$baseUrl$url';
+      String urls = '$baseUrl$url';
       logger.info(urls);
       logger.info("out: $data");
 
       final rawHeader = {
         'Content-Type': 'application/json',
-        'X-Client-Identifier':
-            "REMBOCLASIC",
+        'X-Client-Identifier': clientIdentifier,
       };
-      // final rawHeader = {
-      //   'Content-Type': 'application/json',
-      //   'X-Client-Identifier':
-      //       Get.find<MainController>().config?.value.clientId,
-      // };
       logger.info(rawHeader.toString());
-      // Convert to Map<String, String> by replacing nulls with empty string (or remove them)
-      final header = rawHeader.map((key, value) => MapEntry(key, value ?? ''));
 
-      r = await http.post(Uri.parse(urls), body: data, headers: header);
+      r = await http
+          .post(Uri.parse(urls), body: data, headers: rawHeader)
+          .timeout(Duration(seconds: AppConfig().apiTimeoutSeconds));
       logger.info('url: $url, status code: ${r.statusCode}');
       logger.info('url: ${url}body: ${r.body}');
 
@@ -46,9 +41,12 @@ class ApiClient extends ChangeNotifier {
         logger.error(r.statusCode.toString());
         logger.error(r.body);
       }
+    } on TimeoutException catch (e, stackTrace) {
+      logger.error("API timeout", error: e, stackTrace: stackTrace);
+      rethrow;
     } catch (e, stackTrace) {
       logger.error("API failed", error: e, stackTrace: stackTrace);
-      rethrow; // Let the caller handle the error
+      rethrow;
     }
     return await Future.value(r);
   }
@@ -63,7 +61,6 @@ class ApiService extends GetxService {
 
   // ... other API methods
 }
-
 
 // class AesDecryption {
 //   static final key = encrypt.Key.fromUtf8('kOFq5NYMkfiYPayzs3GntbP2mCT+39WLDcnuLJ5Rsrg='); // 32 bytes
